@@ -11,7 +11,6 @@ How to build
 1. Install dev deps:
 
 ```powershell
-cd "c:\Users\evan7\Desktop\GithubProj\cluesbysamsolver"
 npm install
 ```
 
@@ -28,4 +27,5 @@ npx tsc
 Notes / next steps
 - I implemented core masks and a working solver enumerator and a few regex patterns. You can extend `src/parser.ts` with more patterns.
 - To auto-click or integrate UI, update `src/content.ts` to query DOM and apply the suggestions.
+
 
