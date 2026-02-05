@@ -1,0 +1,21 @@
+{
+  "name": "cluesbysam-solver-ext",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "echo 'Development: compile with tsc -w or use a bundler'",
+    "lint": "echo 'no linter configured'",
+    "test": "node test/test_solver.js",
+    "bundle": "node -e \"const esbuild = require('./node_modules/esbuild'); esbuild.buildSync({ entryPoints: ['src/content.ts'], bundle: true, platform: 'browser', format: 'iife', outfile: 'dist/content.js', target: 'es2020' });\"",
+    "build:all": "tsc && npm run bundle"
+  },
+  "devDependencies": {
+    "esbuild": "^0.18.17",
+    "typescript": "~5.2.2"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "undici": "^7.20.0"
+  }
+}

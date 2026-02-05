@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "CluesBySam Solver",
+  "version": "0.1.0",
+  "description": "Content script that reads Clues by Sam board and suggests forced moves.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://cluesbysam.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://cluesbysam.com/*"],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle",
+      "type": "module"
+    }
+  ]
+}
