@@ -188,54 +188,75 @@ function toggleRulesPanel() {
   panel.id = RULES_PANEL_ID;
   panel.style.cssText = `
     position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    top: 50px;
+    right: 20px;
     z-index: 1000000;
     background: #1e1e1e;
     color: #e0e0e0;
     padding: 20px;
     border-radius: 8px;
-    max-width: 800px;
-    max-height: 80vh;
-    overflow-y: auto;
+    width: 600px;
+    height: 700px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     font-family: monospace;
     font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    resize: both;
+    overflow: hidden;
   `;
+  
+  // Header with title and close button
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-shrink:0;";
+  
+  const title = document.createElement("h3");
+  title.textContent = "⚙ Clue Rules Manager";
+  title.style.cssText = "margin:0;color:#4fc3f7;font-size:16px;";
+  header.appendChild(title);
   
   const closeBtn = document.createElement("button");
   closeBtn.textContent = "✕";
-  closeBtn.style.cssText = "float:right;background:#c00;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;";
+  closeBtn.style.cssText = "background:#c00;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:14px;font-weight:bold;";
   closeBtn.onclick = () => panel?.remove();
-  panel.appendChild(closeBtn);
+  header.appendChild(closeBtn);
   
-  const title = document.createElement("h3");
-  title.textContent = "Clue Translation & Rules";
-  title.style.cssText = "margin:0 0 16px 0;color:#fff;";
-  panel.appendChild(title);
+  panel.appendChild(header);
+  
+  // Scrollable content area
+  const content = document.createElement("div");
+  content.style.cssText = "flex:1;overflow-y:auto;overflow-x:hidden;";
   
   // Show current clues with translations
   const snapshot = buildBoardSnapshotFromDOM();
-  renderClueTranslations(panel, snapshot);
+  renderClueTranslations(content, snapshot);
   
   // Add custom rule form
-  renderCustomRuleForm(panel);
+  renderCustomRuleForm(content);
   
+  panel.appendChild(content);
   document.body.appendChild(panel);
 }
 
 function renderClueTranslations(container: HTMLElement, snapshot: BoardSnapshot) {
   const section = document.createElement("div");
-  section.style.marginBottom = "20px";
+  section.style.marginBottom = "24px";
   
   const heading = document.createElement("h4");
-  heading.textContent = "Clues & Translations";
-  heading.style.cssText = "margin:0 0 8px 0;color:#4fc3f7;";
+  heading.textContent = "📋 Puzzle Clues";
+  heading.style.cssText = "margin:0 0 4px 0;color:#4fc3f7;font-size:14px;";
   section.appendChild(heading);
   
+  const desc = document.createElement("p");
+  desc.textContent = "Click checkbox to enable/disable clues. Disabled clues are grayed out and excluded from solver.";
+  desc.style.cssText = "margin:0 0 12px 0;color:#999;font-size:11px;";
+  section.appendChild(desc);
+  
   if (snapshot.clues.length === 0) {
-    section.appendChild(document.createTextNode("No clues found"));
+    const noClues = document.createElement("div");
+    noClues.textContent = "No clues found on this page";
+    noClues.style.cssText = "color:#888;font-style:italic;padding:8px;";
+    section.appendChild(noClues);
     container.appendChild(section);
     return;
   }
@@ -252,13 +273,16 @@ function renderClueTranslations(container: HTMLElement, snapshot: BoardSnapshot)
   snapshot.clues.forEach((clue, idx) => {
     const isDisabled = disabledClues.has(clue);
     const clueDiv = document.createElement("div");
-    clueDiv.style.cssText = `margin-bottom:12px;padding:8px;background:#2a2a2a;border-radius:4px;border-left:3px solid #555;opacity:${isDisabled ? '0.5' : '1'};`;
+    clueDiv.style.cssText = `margin-bottom:14px;padding:10px;background:${isDisabled ? '#1a1a1a' : '#2a2a2a'};border-radius:4px;border-left:4px solid ${isDisabled ? '#555' : '#4fc3f7'};transition:all 0.2s;`;
+    
+    const headerRow = document.createElement("div");
+    headerRow.style.cssText = "display:flex;align-items:center;margin-bottom:6px;";
     
     // Toggle button
     const toggleBtn = document.createElement("button");
-    toggleBtn.textContent = isDisabled ? "☐" : "☑";
-    toggleBtn.style.cssText = "padding:2px 6px;margin-right:8px;background:#666;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:12px;";
-    toggleBtn.title = isDisabled ? "Enable clue" : "Disable clue (grey out)";
+    toggleBtn.textContent = isDisabled ? "☐ OFF" : "☑ ON";
+    toggleBtn.style.cssText = `padding:4px 8px;margin-right:10px;background:${isDisabled ? '#666' : '#51cf66'};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;font-weight:bold;`;
+    toggleBtn.title = isDisabled ? "Click to enable this clue" : "Click to disable this clue";
     toggleBtn.onclick = () => {
       if (isDisabled) {
         disabledClues.delete(clue);
@@ -269,31 +293,31 @@ function renderClueTranslations(container: HTMLElement, snapshot: BoardSnapshot)
       toggleRulesPanel();
       toggleRulesPanel();
     };
-    clueDiv.appendChild(toggleBtn);
+    headerRow.appendChild(toggleBtn);
     
     const clueText = document.createElement("span");
-    clueText.textContent = `${idx + 1}. ${clue}`;
-    clueText.style.cssText = "font-weight:bold;";
-    clueDiv.appendChild(clueText);
-    clueDiv.appendChild(document.createElement("br"));
+    clueText.textContent = `#${idx + 1}: ${clue}`;
+    clueText.style.cssText = `font-weight:bold;color:${isDisabled ? '#888' : '#fff'};flex:1;`;
+    headerRow.appendChild(clueText);
+    
+    clueDiv.appendChild(headerRow);
     
     try {
       const constraints = compileClues([clue], snapshot);
-      const dslDiv = document.createElement("div");
-      dslDiv.style.cssText = "margin-top:4px;margin-left:22px;";
+      const statusDiv = document.createElement("div");
+      statusDiv.style.cssText = "margin-left:76px;margin-top:4px;";
       
       if (constraints.length === 0) {
-        dslDiv.textContent = "❌ NOT TRANSLATED (no matching pattern)";
-        dslDiv.style.color = "#ff6b6b";
+        statusDiv.innerHTML = `<span style="color:#ff6b6b;font-weight:bold;">❌ NOT TRANSLATED</span> <span style="color:#999;font-size:10px;">(no matching pattern found)</span>`;
       } else {
-        dslDiv.innerHTML = `<strong style="color:#51cf66;">✓ Constraints (${constraints.length}):</strong>`;
+        statusDiv.innerHTML = `<span style="color:#51cf66;font-weight:bold;">✓ ACTIVE</span> <span style="color:#aaa;font-size:10px;">(${constraints.length} constraint${constraints.length > 1 ? 's' : ''} generated)</span>`;
         
         const detailsDiv = document.createElement("div");
-        detailsDiv.style.cssText = "margin-top:4px;padding:6px;background:#1a1a1a;border-radius:2px;font-size:11px;color:#aaa;font-family:monospace;white-space:pre-wrap;word-break:break-all;";
+        detailsDiv.style.cssText = "margin-top:6px;padding:8px;background:#1a1a1a;border-radius:3px;font-size:10px;color:#aaa;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #333;";
         
         // Pretty-print constraints in human-readable format
         const constraintsSummary = constraints.map((c: any, i: number) => {
-          const lines: string[] = [`[${i}] ${c.kind}`];
+          const lines: string[] = [`Constraint ${i + 1}: ${c.kind}`];
           Object.entries(c).forEach(([key, value]: [string, any]) => {
             if (key !== 'kind') {
               if (typeof value === 'number') {
@@ -309,14 +333,14 @@ function renderClueTranslations(container: HTMLElement, snapshot: BoardSnapshot)
         }).join('\n\n');
         
         detailsDiv.textContent = constraintsSummary;
-        dslDiv.appendChild(detailsDiv);
+        statusDiv.appendChild(detailsDiv);
       }
       
-      clueDiv.appendChild(dslDiv);
+      clueDiv.appendChild(statusDiv);
     } catch (e) {
       const errorDiv = document.createElement("div");
-      errorDiv.textContent = `❌ ERROR: ${e}`;
-      errorDiv.style.cssText = "margin-top:4px;margin-left:22px;color:#ff6b6b;";
+      errorDiv.innerHTML = `<span style="color:#ff6b6b;font-weight:bold;">❌ ERROR:</span> <span style="color:#ff8888;">${e}</span>`;
+      errorDiv.style.cssText = "margin-top:6px;margin-left:76px;font-size:11px;";
       clueDiv.appendChild(errorDiv);
     }
     
@@ -328,40 +352,53 @@ function renderClueTranslations(container: HTMLElement, snapshot: BoardSnapshot)
 
 function renderCustomRuleForm(container: HTMLElement) {
   const section = document.createElement("div");
+  section.style.cssText = "border-top:2px solid #333;padding-top:20px;margin-top:20px;";
   
   const heading = document.createElement("h4");
-  heading.textContent = "Custom DSL Rules";
-  heading.style.cssText = "margin:0 0 8px 0;color:#4fc3f7;";
+  heading.textContent = "➕ Add Custom Rule";
+  heading.style.cssText = "margin:0 0 4px 0;color:#ffd43b;font-size:14px;";
   section.appendChild(heading);
   
   const desc = document.createElement("p");
-  desc.textContent = "Add custom clue→DSL mappings for patterns not supported by default rules.";
-  desc.style.cssText = "margin:0 0 12px 0;color:#999;font-size:11px;";
+  desc.textContent = "Create custom clue→DSL mappings for patterns not supported by built-in rules.";
+  desc.style.cssText = "margin:0 0 12px 0;color:#999;font-size:11px;line-height:1.4;";
   section.appendChild(desc);
   
   const form = document.createElement("div");
-  form.style.cssText = "padding:12px;background:#2a2a2a;border-radius:4px;margin-bottom:16px;";
+  form.style.cssText = "padding:14px;background:#2a2a2a;border-radius:6px;margin-bottom:16px;border:1px solid #444;";
+  
+  const clueLabel = document.createElement("label");
+  clueLabel.textContent = "Clue Text:";
+  clueLabel.style.cssText = "display:block;margin-bottom:4px;color:#ddd;font-size:11px;font-weight:bold;";
+  form.appendChild(clueLabel);
   
   const clueInput = document.createElement("input");
   clueInput.type = "text";
-  clueInput.placeholder = "Clue text (exact match)";
-  clueInput.style.cssText = "width:100%;padding:6px;margin-bottom:8px;background:#1a1a1a;color:#fff;border:1px solid #444;border-radius:4px;";
+  clueInput.placeholder = "e.g., Gary has exactly 3 innocent neighbors";
+  clueInput.style.cssText = "width:100%;padding:8px;margin-bottom:12px;background:#1a1a1a;color:#fff;border:1px solid #555;border-radius:4px;font-size:12px;box-sizing:border-box;";
   form.appendChild(clueInput);
+  
+  const dslLabel = document.createElement("label");
+  dslLabel.textContent = "DSL Expression:";
+  dslLabel.style.cssText = "display:block;margin-bottom:4px;color:#ddd;font-size:11px;font-weight:bold;";
+  form.appendChild(dslLabel);
   
   const dslInput = document.createElement("input");
   dslInput.type = "text";
-  dslInput.placeholder = "DSL expression (e.g., eq(3, neighbor(gary)@innocent))";
-  dslInput.style.cssText = "width:100%;padding:6px;margin-bottom:8px;background:#1a1a1a;color:#fff;border:1px solid #444;border-radius:4px;";
+  dslInput.placeholder = "e.g., eq(3, neighbor(gary)@innocent)";
+  dslInput.style.cssText = "width:100%;padding:8px;margin-bottom:12px;background:#1a1a1a;color:#fff;border:1px solid #555;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;";
   form.appendChild(dslInput);
   
   const addBtn = document.createElement("button");
-  addBtn.textContent = "+ Add Rule";
-  addBtn.style.cssText = "padding:6px 12px;background:#4fc3f7;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:bold;";
+  addBtn.textContent = "➕ Add Custom Rule";
+  addBtn.style.cssText = "padding:8px 16px;background:#4fc3f7;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:12px;";
+  addBtn.onmouseover = () => addBtn.style.background = "#6dd5ff";
+  addBtn.onmouseout = () => addBtn.style.background = "#4fc3f7";
   addBtn.onclick = () => {
     const clue = clueInput.value.trim();
     const dsl = dslInput.value.trim();
     if (!clue || !dsl) {
-      alert("Both clue and DSL are required");
+      alert("⚠️ Both clue text and DSL expression are required");
       return;
     }
     const customRules = getCustomRules();
@@ -381,42 +418,59 @@ function renderCustomRuleForm(container: HTMLElement) {
   const customRules = getCustomRules();
   if (customRules.length > 0) {
     const listHeading = document.createElement("h5");
-    listHeading.textContent = "Saved Custom Rules";
-    listHeading.style.cssText = "margin:16px 0 8px 0;color:#ffd43b;";
+    listHeading.textContent = `📝 Your Custom Rules (${customRules.length})`;
+    listHeading.style.cssText = "margin:20px 0 10px 0;color:#ffd43b;font-size:13px;";
     section.appendChild(listHeading);
     
     customRules.forEach((rule, idx) => {
       const ruleDiv = document.createElement("div");
-      ruleDiv.style.cssText = `margin-bottom:8px;padding:8px;background:${rule.enabled ? '#2a2a2a' : '#1a1a1a'};border-radius:4px;opacity:${rule.enabled ? '1' : '0.5'};`;
+      ruleDiv.style.cssText = `margin-bottom:10px;padding:10px;background:${rule.enabled ? '#2a2a2a' : '#1a1a1a'};border-radius:4px;border:1px solid ${rule.enabled ? '#444' : '#333'};display:flex;align-items:flex-start;gap:8px;`;
+      
+      const btnContainer = document.createElement("div");
+      btnContainer.style.cssText = "display:flex;flex-direction:column;gap:4px;";
       
       const toggleBtn = document.createElement("button");
-      toggleBtn.textContent = rule.enabled ? "✓" : "✗";
-      toggleBtn.style.cssText = `padding:2px 6px;margin-right:8px;background:${rule.enabled ? '#51cf66' : '#666'};color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;`;
+      toggleBtn.textContent = rule.enabled ? "ON" : "OFF";
+      toggleBtn.title = rule.enabled ? "Click to disable" : "Click to enable";
+      toggleBtn.style.cssText = `padding:4px 8px;background:${rule.enabled ? '#51cf66' : '#666'};color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;font-weight:bold;`;
       toggleBtn.onclick = () => {
         customRules[idx].enabled = !customRules[idx].enabled;
         saveCustomRules(customRules);
         toggleRulesPanel();
         toggleRulesPanel();
       };
-      ruleDiv.appendChild(toggleBtn);
+      btnContainer.appendChild(toggleBtn);
       
       const deleteBtn = document.createElement("button");
-      deleteBtn.textContent = "🗑";
-      deleteBtn.style.cssText = "padding:2px 6px;margin-right:8px;background:#c00;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;";
+      deleteBtn.textContent = "DEL";
+      deleteBtn.title = "Delete this custom rule";
+      deleteBtn.style.cssText = "padding:4px 8px;background:#c92a2a;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;font-weight:bold;";
       deleteBtn.onclick = () => {
-        if (confirm("Delete this custom rule?")) {
+        if (confirm(`Delete custom rule?\n\n"${rule.clue}"`)) {
           customRules.splice(idx, 1);
           saveCustomRules(customRules);
           toggleRulesPanel();
           toggleRulesPanel();
         }
       };
-      ruleDiv.appendChild(deleteBtn);
+      btnContainer.appendChild(deleteBtn);
       
-      const textSpan = document.createElement("span");
-      textSpan.textContent = `"${rule.clue}" → ${rule.dsl}`;
-      textSpan.style.cssText = "font-size:11px;";
-      ruleDiv.appendChild(textSpan);
+      ruleDiv.appendChild(btnContainer);
+      
+      const textContainer = document.createElement("div");
+      textContainer.style.cssText = "flex:1;";
+      
+      const clueText = document.createElement("div");
+      clueText.textContent = `"${rule.clue}"`;
+      clueText.style.cssText = `color:${rule.enabled ? '#fff' : '#888'};font-weight:bold;font-size:11px;margin-bottom:4px;`;
+      textContainer.appendChild(clueText);
+      
+      const dslText = document.createElement("div");
+      dslText.textContent = `→ ${rule.dsl}`;
+      dslText.style.cssText = `color:${rule.enabled ? '#aaa' : '#666'};font-family:monospace;font-size:10px;`;
+      textContainer.appendChild(dslText);
+      
+      ruleDiv.appendChild(textContainer);
       
       section.appendChild(ruleDiv);
     });
@@ -486,14 +540,36 @@ function runSolveAndUpdateUI() {
       prevStatuses[String(c.id)] = c.status;
     }
     if (statusChanges.length) infoLog('CluesBySam Solver: status changes detected:', statusChanges);
-    const suggestion = solve(snapshot as any);
+    
+    // Filter out disabled clues before solving
+    let disabledClues: Set<string>;
+    try {
+      const stored = localStorage.getItem('cluesbysam_disabled_clues');
+      disabledClues = stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      disabledClues = new Set();
+    }
+    const activeSnapshot = {
+      ...snapshot,
+      clues: snapshot.clues.filter(c => !disabledClues.has(c))
+    };
+    
+    const suggestion = solve(activeSnapshot as any);
     debugLog("Solver suggestion:", suggestion);
     const ov = ensureOverlay();
-    // Build overlay summary + details
+    
+    // Update stats section
+    let statsDiv = ov.querySelector('.solver-stats') as HTMLDivElement | null;
+    if (!statsDiv) {
+      statsDiv = document.createElement('div');
+      statsDiv.className = 'solver-stats';
+      ov.insertBefore(statsDiv, ov.firstChild);
+    }
     const lines: string[] = [];
     lines.push(`Solutions: ${suggestion.numSolutions}`);
     lines.push(`Forced: ${suggestion.forced.length}`);
-    ov.innerText = lines.join('\n');
+    statsDiv.innerText = lines.join('\n');
+    
     // attach expandable details
     let details = ov.querySelector('.solver-details') as HTMLDivElement | null;
     if (!details) {
