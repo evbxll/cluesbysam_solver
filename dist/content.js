@@ -1789,10 +1789,63 @@
         try {
           const translation = getClueTranslation(clueInput, state.snapshot);
           if (translation.constraints.length > 0) {
-            const status = document.createElement("div");
-            status.style.cssText = "margin-top:6px;margin-left:32px;font-size:11px;color:#51cf66;";
-            status.textContent = `\u2713 ${translation.constraints.length} constraint${translation.constraints.length > 1 ? "s" : ""}`;
-            clueDiv.appendChild(status);
+            const constraintSection = document.createElement("div");
+            constraintSection.style.cssText = "margin-top:6px;margin-left:32px;";
+            constraintSection.setAttribute("data-solver-ui", "true");
+            const header = document.createElement("div");
+            header.style.cssText = "font-size:11px;color:#51cf66;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px;";
+            header.setAttribute("data-solver-ui", "true");
+            const arrow = document.createElement("span");
+            arrow.textContent = "\u25B6";
+            arrow.style.cssText = "font-size:9px;transition:transform 0.2s;display:inline-block;";
+            header.appendChild(arrow);
+            const text = document.createElement("span");
+            text.textContent = `\u2713 ${translation.constraints.length} constraint${translation.constraints.length > 1 ? "s" : ""}`;
+            header.appendChild(text);
+            const details = document.createElement("div");
+            details.style.cssText = "display:none;margin-top:4px;padding:6px;background:#1a1a1a;border-radius:3px;font-family:monospace;font-size:10px;color:#90ee90;max-height:150px;overflow-y:auto;";
+            if (translation.dsl) {
+              const dslDiv = document.createElement("div");
+              dslDiv.style.cssText = "margin-bottom:4px;color:#4fc3f7;";
+              dslDiv.textContent = `DSL: ${translation.dsl}`;
+              details.appendChild(dslDiv);
+            }
+            translation.constraints.forEach((c, i) => {
+              const constraintDiv = document.createElement("div");
+              constraintDiv.style.cssText = "margin:2px 0;padding:2px;";
+              constraintDiv.textContent = `${i + 1}. ${JSON.stringify(c)}`;
+              details.appendChild(constraintDiv);
+            });
+            let isExpanded = false;
+            let clickTimeout = null;
+            header.onclick = (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              if (clickTimeout !== null) {
+                return;
+              }
+              const wasObserving = observer !== null;
+              if (wasObserving && observer) {
+                observer.disconnect();
+              }
+              isExpanded = !isExpanded;
+              arrow.style.transform = isExpanded ? "rotate(90deg)" : "";
+              details.style.display = isExpanded ? "block" : "none";
+              clickTimeout = window.setTimeout(() => {
+                clickTimeout = null;
+              }, 300);
+              if (wasObserving) {
+                setTimeout(() => {
+                  if (observer) {
+                    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+                  }
+                }, 50);
+              }
+            };
+            constraintSection.appendChild(header);
+            constraintSection.appendChild(details);
+            clueDiv.appendChild(constraintSection);
           }
         } catch {
         }
@@ -1952,7 +2005,7 @@ Please fix the syntax and try again.`);
     observer = new MutationObserver((mutations) => {
       const relevantMutation = mutations.some((m) => {
         const target = m.target;
-        if (target.id === OVERLAY_ID || target.id === "solver-stats-panel" || target.id === "solver-rules-panel" || target.closest("#" + OVERLAY_ID) || target.closest("#solver-stats-panel") || target.closest("#solver-rules-panel")) {
+        if (target.hasAttribute?.("data-solver-ui") || target.closest?.("[data-solver-ui]") || target.id === OVERLAY_ID || target.id === "solver-stats-panel" || target.id === "solver-rules-panel" || target.closest("#" + OVERLAY_ID) || target.closest("#solver-stats-panel") || target.closest("#solver-rules-panel")) {
           return false;
         }
         return true;
