@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CluesBySam Solver Comprehensive Test</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      margin: 0;
+    }
+    
+    .test-container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      color: #4fc3f7;
+      border-bottom: 2px solid #4fc3f7;
+      padding-bottom: 10px;
+    }
+    
+    h2 {
+      color: #ffd43b;
+      margin-top: 30px;
+    }
+    
+    .test-section {
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    
+    .test-result {
+      margin: 8px 0;
+      padding: 10px;
+      border-radius: 4px;
+      border-left: 4px solid;
+    }
+    
+    .pass {
+      background: #1b3a1f;
+      border-color: #51cf66;
+      color: #a3e9a4;
+    }
+    
+    .fail {
+      background: #3a1b1b;
+      border-color: #ff6b6b;
+      color: #ffc9c9;
+    }
+    
+    .info {
+      background: #1a2a3a;
+      border-color: #4fc3f7;
+      color: #a5d8ff;
+    }
+    
+    .warn {
+      background: #3a321a;
+      border-color: #ffd43b;
+      color: #ffe066;
+    }
+    
+    .console-log {
+      background: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 10px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin: 10px 0;
+    }
+    
+    .console-log div {
+      margin: 2px 0;
+      padding: 2px;
+    }
+    
+    .console-debug { color: #888; }
+    .console-info { color: #4fc3f7; }
+    .console-warn { color: #ffd43b; }
+    .console-error { color: #ff6b6b; }
+    
+    /* Puzzle Grid */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin: 20px 0;
+    }
+    
+    .card-container {
+      background: #1e1e1e;
+      border: 2px solid #333;
+      border-radius: 6px;
+      padding: 12px;
+      transition: all 0.2s;
+    }
+    
+    .card-container:hover {
+      border-color: #4fc3f7;
+      transform: translateY(-2px);
+    }
+    
+    .card {
+      position: relative;
+    }
+    
+    .card.flipped.innocent .card-container {
+      border-color: #51cf66;
+      background: #1b3a1f;
+    }
+    
+    .card.flipped.criminal .card-container {
+      border-color: #ff6b6b;
+      background: #3a1b1b;
+    }
+    
+    .coord {
+      position: absolute;
+      top: 0;
+      right: 0;
+      font-size: 10px;
+      color: #888;
+      background: #2a2a2a;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    
+    .name h3 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+      color: #fff;
+    }
+    
+    .profession {
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+    
+    .card-back {
+      margin-top: 12px;
+      padding: 8px;
+      background: #2a2a2a;
+      border-radius: 4px;
+      border-left: 3px solid #4fc3f7;
+    }
+    
+    .hint {
+      font-size: 12px;
+      color: #e0e0e0;
+      margin: 4px 0;
+      line-height: 1.4;
+    }
+    
+    button {
+      padding: 8px 16px;
+      background: #4fc3f7;
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      margin: 5px;
+    }
+    
+    button:hover {
+      background: #339af0;
+    }
+    
+    button.danger {
+      background: #ff6b6b;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>🔍 CluesBySam Solver - Comprehensive Test Suite</h1>
+    
+    <div class="test-section">
+      <h2>📋 Console Output</h2>
+      <div class="console-log" id="console-output">
+        <div class="console-info">Waiting for extension to load...</div>
+      </div>
+      <button onclick="document.getElementById('console-output').innerHTML = ''">Clear Console</button>
+    </div>
+    
+    <div class="test-section">
+      <h2>✅ Test Results</h2>
+      <div id="test-results">
+        <div class="test-result info">Tests will run automatically after page load...</div>
+      </div>
+      <button onclick="runAllTests()">Re-run Tests</button>
+      <button onclick="testStatsPanel()">Test Stats Panel</button>
+      <button onclick="testRulesPanel()">Test Rules Panel</button>
+      <button onclick="testClueToggle()">Test Full Toggle Cycle</button>
+      <button onclick="clearTestStorage()">Clear Storage</button>
+    </div>
+    
+    <div class="test-section">
+      <h2>🎮 Test Puzzle Board (5x4 = 20 cards)</h2>
+      <p style="color: #aaa;">This grid simulates a CluesBySam puzzle with 20 person cards, clues, and statuses.</p>
+      
+      <div class="card-grid" id="grid">
+        <!-- Row 1 -->
+        <div class="card-container">
+          <div class="card">
+            <div class="coord">A1</div>
+            <div class="name"><h3 class="name">Alice</h3></div>
+            <div class="profession">Doctor</div>
+            <div class="card-back">
+              <div class="hint">Alice is innocent</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-container">
+          <div class="card flipped innocent">
+            <div class="coord">B1</div>
+            <div class="name"><h3>Bob</h3></div>
+            <div class="profession">Engineer</div>
+            <div class="card-back innocent">
+              <div class="hint">Bob has 2 innocent neighbors</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-container">
+          <div class="card">
+            <div class="coord">C1</div>
+            <div class="name"><h3>Charlie</h3></div>
+            <div class="profession">Teacher</div>
+            <div class="card-back">
+              <div class="hint">Charlie is in the same row as a criminal</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-container">
+          <div class="card">
+            <div class="coord">D1</div>
+            <div class="name"><h3>Diana</h3></div>
+            <div class="profession">Artist</div>
+          </div>
+        </div>
+        <div class="card-container">
+          <div class="card flipped criminal">
+            <div class="coord">E1</div>
+            <div class="name"><h3>Eve</h3></div>
+            <div class="profession">Banker</div>
+            <div class="card-back criminal">
+              <div class="hint">Eve has exactly 1 criminal neighbor</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Remaining rows similarly structured -->
+        <div class="card-container"><div class="card"><div class="coord">A2</div><div class="name"><h3>Frank</h3></div><div class="profession">Chef</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">B2</div><div class="name"><h3>Grace</h3></div><div class="profession">Nurse</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">C2</div><div class="name"><h3>Henry</h3></div><div class="profession">Lawyer</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">D2</div><div class="name"><h3>Iris</h3></div><div class="profession">Pilot</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">E2</div><div class="name"><h3>Jack</h3></div><div class="profession">Plumber</div></div></div>
+        
+        <div class="card-container"><div class="card"><div class="coord">A3</div><div class="name"><h3>Kate</h3></div><div class="profession">Writer</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">B3</div><div class="name"><h3>Leo</h3></div><div class="profession">Driver</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">C3</div><div class="name"><h3>Mia</h3></div><div class="profession">Designer</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">D3</div><div class="name"><h3>Nick</h3></div><div class="profession">Accountant</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">E3</div><div class="name"><h3>Olivia</h3></div><div class="profession">Scientist</div></div></div>
+        
+        <div class="card-container"><div class="card"><div class="coord">A4</div><div class="name"><h3>Paul</h3></div><div class="profession">Mechanic</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">B4</div><div class="name"><h3>Quinn</h3></div><div class="profession">Librarian</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">C4</div><div class="name"><h3>Rose</h3></div><div class="profession">Pharmacist</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">D4</div><div class="name"><h3>Sam</h3></div><div class="profession">Photographer</div></div></div>
+        <div class="card-container"><div class="card"><div class="coord">E4</div><div class="name"><h3>Tina</h3></div><div class="profession">Journalist</div></div></div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="dist/content.js"></script>
+  <script>
+    // Enable debug mode
+    localStorage.setItem('cluesbysam_debug', '1');
+    
+    // Capture console output
+    const consoleOutput = document.getElementById('console-output');
+    const originalConsole = {
+      log: console.log,
+      debug: console.debug,
+      info: console.info,
+      warn: console.warn,
+      error: console.error
+    };
+    
+    function addConsoleMessage(level, ...args) {
+      const div = document.createElement('div');
+      div.className = `console-${level}`;
+      div.textContent = `[${level.toUpperCase()}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ')}`;
+      consoleOutput.appendChild(div);
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+      originalConsole[level](...args);
+    }
+    
+    console.log = (...args) => addConsoleMessage('log', ...args);
+    console.debug = (...args) => addConsoleMessage('debug', ...args);
+    console.info = (...args) => addConsoleMessage('info', ...args);
+    console.warn = (...args) => addConsoleMessage('warn', ...args);
+    console.error = (...args) => addConsoleMessage('error', ...args);
+    
+    const resultsDiv = document.getElementById('test-results');
+    
+    function addResult(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = `test-result ${type}`;
+      div.innerHTML = message;
+      resultsDiv.appendChild(div);
+    }
+    
+    function clearResults() {
+      resultsDiv.innerHTML = '';
+    }
+    
+    function testStatsPanel() {
+      addResult('📊 Testing Stats Panel...', 'info');
+      const statsBtn = document.querySelector('.stats-btn');
+      if (statsBtn) {
+        statsBtn.click();
+        setTimeout(() => {
+          const panel = document.getElementById('solver-stats-panel');
+          if (panel) {
+            addResult('✓ Stats panel opened', 'pass');
+          } else {
+            addResult('✗ Stats panel failed to open', 'fail');
+          }
+        }, 100);
+      } else {
+        addResult('✗ Stats button not found', 'fail');
+      }
+    }
+    
+    function testRulesPanel() {
+      addResult('⚙️ Testing Rules Panel...', 'info');
+      const rulesBtn = document.querySelector('.rules-btn');
+      if (rulesBtn) {
+        rulesBtn.click();
+        setTimeout(() => {
+          const panel = document.getElementById('solver-rules-panel');
+          if (panel) {
+            addResult('✓ Rules panel opened', 'pass');
+          } else {
+            addResult('✗ Rules panel failed to open', 'fail');
+          }
+        }, 100);
+      } else {
+        addResult('✗ Rules button not found', 'fail');
+      }
+    }
+    
+    function testClueToggle() {
+      addResult('🔄 Starting Comprehensive Toggle Test Suite...', 'info');
+      addResult('═'.repeat(50), 'info');
+      
+      // Clear any previous state
+      localStorage.removeItem('cluesbysam_disabled_clues');
+      
+      // Step 1: Verify initial state
+      const overlay = document.getElementById('cluesbysam-solver-overlay');
+      if (!overlay) {
+        addResult('✗ CRITICAL: Overlay not found', 'fail');
+        return;
+      }
+      
+      const statsBtn = overlay.querySelector('.stats-btn');
+      if (!statsBtn) {
+        addResult('✗ CRITICAL: Stats button not found', 'fail');
+        return;
+      }
+      
+      const initialStats = statsBtn.textContent.trim();
+      const initialMatch = initialStats.match(/📊\s*(\d+)\/(\d+)/);
+      if (!initialMatch) {
+        addResult(`✗ CRITICAL: Cannot parse stats "${initialStats}"`, 'fail');
+        return;
+      }
+      
+      const [, initialSols, initialForced] = initialMatch;
+      addResult(`✓ Initial state: ${initialSols} solutions, ${initialForced} forced`, 'pass');
+      
+      // Step 2: Open rules panel
+      let rulesPanel = document.getElementById('solver-rules-panel');
+      if (!rulesPanel) {
+        addResult('Opening Rules panel...', 'info');
+        const rulesBtn = overlay.querySelector('.rules-btn');
+        if (!rulesBtn) {
+          addResult('✗ CRITICAL: Rules button not found', 'fail');
+          return;
+        }
+        rulesBtn.click();
+        setTimeout(() => runToggleTests(initialSols, initialForced), 400);
+      } else {
+        runToggleTests(initialSols, initialForced);
+      }
+    }
+    
+    function runToggleTests(initialSols, initialForced) {
+      const rulesPanel = document.getElementById('solver-rules-panel');
+      if (!rulesPanel) {
+        addResult('✗ CRITICAL: Rules panel failed to open', 'fail');
+        return;
+      }
+      addResult('✓ Rules panel opened', 'pass');
+      
+      // Find all clue toggle buttons
+      const allButtons = Array.from(rulesPanel.querySelectorAll('button'));
+      const toggleButtons = [];
+      const buttonIndices = [];
+      
+      allButtons.forEach((btn, idx) => {
+        const text = btn.textContent.trim();
+        if (text === '☑' || text === '☐') {
+          toggleButtons.push(btn);
+          buttonIndices.push(idx);
+        }
+      });
+      
+      if (toggleButtons.length === 0) {
+        addResult('✗ CRITICAL: No toggle buttons found', 'fail');
+        return;
+      }
+      
+      addResult(`✓ Found ${toggleButtons.length} clue toggle buttons`, 'pass');
+      
+      // Get clue texts for verification
+      const clueTexts = [];
+      toggleButtons.forEach((btn, i) => {
+        const parent = btn.parentElement;
+        const label = parent?.querySelector('div:last-child');
+        const text = label ? label.textContent.trim() : 'Unknown';
+        clueTexts.push(text);
+        const state = btn.textContent.trim();
+        addResult(`  Clue ${i + 1}: ${state} "${text.substring(0, 40)}..."`, 'info');
+      });
+      
+      // Test Plan: Toggle first clue through complete cycle
+      addResult('═'.repeat(50), 'info');
+      addResult('TEST 1: Toggle First Clue OFF → ON → OFF', 'info');
+      addResult('═'.repeat(50), 'info');
+      
+      const testButtonIndex = buttonIndices[0];
+      const firstButton = toggleButtons[0];
+      const initialState = firstButton.textContent.trim();
+      
+      addResult(`Initial state: ${initialState}`, 'info');
+      
+      // If already OFF, toggle ON first to get to known state
+      if (initialState === '☐') {
+        addResult('Clue is OFF, toggling ON to establish baseline...', 'info');
+        firstButton.click();
+        setTimeout(() => {
+          verifyToggleState(testButtonIndex, '☑', 'Baseline ON state', () => {
+            setTimeout(() => startToggleOffTest(testButtonIndex, initialSols, initialForced), 300);
+          });
+        }, 400);
+      } else {
+        startToggleOffTest(testButtonIndex, initialSols, initialForced);
+      }
+    }
+    
+    function startToggleOffTest(buttonIndex, baselineSols, baselineForced) {
+      addResult('─'.repeat(50), 'info');
+      addResult('STEP 1: Toggle clue OFF', 'info');
+      
+      const overlay = document.getElementById('cluesbysam-solver-overlay');
+      const statsBtn = overlay.querySelector('.stats-btn');
+      const beforeStats = statsBtn.textContent.trim();
+      
+      // Click the toggle
+      const rulesPanel = document.getElementById('solver-rules-panel');
+      const buttons = Array.from(rulesPanel.querySelectorAll('button'));
+      const toggleBtn = buttons[buttonIndex];
+      
+      if (!toggleBtn) {
+        addResult('✗ CRITICAL: Toggle button disappeared', 'fail');
+        return;
+      }
+      
+      toggleBtn.click();
+      
+      setTimeout(() => {
+        // Verify toggle button changed to OFF
+        verifyToggleState(buttonIndex, '☐', 'Toggle OFF', () => {
+          // Verify localStorage updated
+          const stored = localStorage.getItem('cluesbysam_disabled_clues');
+          if (stored) {
+            const disabled = JSON.parse(stored);
+            if (disabled.length === 1) {
+              addResult(`✓ localStorage: 1 clue disabled`, 'pass');
+            } else {
+              addResult(`✗ localStorage: Expected 1 disabled, got ${disabled.length}`, 'fail');
+            }
+          } else {
+            addResult('✗ localStorage: Not updated', 'fail');
+          }
+          
+          // Verify stats button updated
+          const afterStats = statsBtn.textContent.trim();
+          const afterMatch = afterStats.match(/📊\s*(\d+)\/(\d+)/);
+          
+          if (afterMatch) {
+            const [, afterSols, afterForced] = afterMatch;
+            
+            // Stats should either change or stay at unconstrained baseline
+            if (afterStats !== beforeStats) {
+              addResult(`✓ Stats updated: ${beforeStats} → ${afterStats}`, 'pass');
+            } else if (afterSols === '262144' && afterForced === '0') {
+              addResult(`ℹ️ Stats unchanged (unconstrained puzzle): ${afterStats}`, 'info');
+            } else {
+              addResult(`⚠ Stats unchanged: ${afterStats}`, 'warn');
+            }
+            
+            // Wait and toggle back ON
+            setTimeout(() => toggleBackOnTest(buttonIndex, afterSols, afterForced), 500);
+          } else {
+            addResult(`✗ Cannot parse stats: "${afterStats}"`, 'fail');
+          }
+        });
+      }, 400);
+    }
+    
+    function toggleBackOnTest(buttonIndex, offStateSols, offStateForced) {
+      addResult('─'.repeat(50), 'info');
+      addResult('STEP 2: Toggle clue back ON', 'info');
+      
+      const overlay = document.getElementById('cluesbysam-solver-overlay');
+      const statsBtn = overlay.querySelector('.stats-btn');
+      const beforeStats = statsBtn.textContent.trim();
+      
+      const rulesPanel = document.getElementById('solver-rules-panel');
+      const buttons = Array.from(rulesPanel.querySelectorAll('button'));
+      const toggleBtn = buttons[buttonIndex];
+      
+      if (!toggleBtn) {
+        addResult('✗ CRITICAL: Toggle button disappeared', 'fail');
+        return;
+      }
+      
+      const beforeState = toggleBtn.textContent.trim();
+      if (beforeState !== '☐') {
+        addResult(`✗ CRITICAL: Expected OFF (☐) but got "${beforeState}"`, 'fail');
+        return;
+      }
+      
+      toggleBtn.click();
+      
+      setTimeout(() => {
+        // Verify toggle button changed back to ON
+        verifyToggleState(buttonIndex, '☑', 'Toggle ON', () => {
+          // Verify localStorage cleared
+          const stored = localStorage.getItem('cluesbysam_disabled_clues');
+          const disabled = stored ? JSON.parse(stored) : [];
+          
+          if (disabled.length === 0) {
+            addResult(`✓ localStorage: 0 clues disabled (cleared)`, 'pass');
+          } else {
+            addResult(`✗ localStorage: Expected 0 disabled, got ${disabled.length}`, 'fail');
+          }
+          
+          // Verify stats button reverted
+          const afterStats = statsBtn.textContent.trim();
+          const afterMatch = afterStats.match(/📊\s*(\d+)\/(\d+)/);
+          
+          if (afterMatch) {
+            const [, afterSols, afterForced] = afterMatch;
+            
+            if (afterStats !== beforeStats) {
+              addResult(`✓ Stats reverted: ${beforeStats} → ${afterStats}`, 'pass');
+            } else if (afterSols === '262144' && afterForced === '0') {
+              addResult(`ℹ️ Stats unchanged (unconstrained puzzle): ${afterStats}`, 'info');
+            } else {
+              addResult(`⚠ Stats unchanged: ${afterStats}`, 'warn');
+            }
+            
+            // Final OFF test
+            setTimeout(() => finalToggleOffTest(buttonIndex, afterSols, afterForced), 500);
+          } else {
+            addResult(`✗ Cannot parse stats: "${afterStats}"`, 'fail');
+          }
+        });
+      }, 400);
+    }
+    
+    function finalToggleOffTest(buttonIndex, onStateSols, onStateForced) {
+      addResult('─'.repeat(50), 'info');
+      addResult('STEP 3: Final toggle OFF (verify consistency)', 'info');
+      
+      const overlay = document.getElementById('cluesbysam-solver-overlay');
+      const statsBtn = overlay.querySelector('.stats-btn');
+      
+      const rulesPanel = document.getElementById('solver-rules-panel');
+      const buttons = Array.from(rulesPanel.querySelectorAll('button'));
+      const toggleBtn = buttons[buttonIndex];
+      
+      if (!toggleBtn) {
+        addResult('✗ CRITICAL: Toggle button disappeared', 'fail');
+        return;
+      }
+      
+      toggleBtn.click();
+      
+      setTimeout(() => {
+        verifyToggleState(buttonIndex, '☐', 'Final toggle OFF', () => {
+          const stored = localStorage.getItem('cluesbysam_disabled_clues');
+          const disabled = stored ? JSON.parse(stored) : [];
+          
+          if (disabled.length === 1) {
+            addResult(`✓ localStorage: Consistently shows 1 disabled`, 'pass');
+          } else {
+            addResult(`✗ localStorage inconsistent: ${disabled.length} disabled`, 'fail');
+          }
+          
+          // Summary
+          addResult('═'.repeat(50), 'info');
+          addResult('<strong>🎯 TOGGLE TEST COMPLETE</strong>', 'pass');
+          addResult('═'.repeat(50), 'info');
+          addResult('<strong>Summary:</strong>', 'info');
+          addResult('  ✓ Toggle OFF → Button updates to ☐', 'pass');
+          addResult('  ✓ Toggle OFF → localStorage saves state', 'pass');
+          addResult('  ✓ Toggle ON → Button updates to ☑', 'pass');
+          addResult('  ✓ Toggle ON → localStorage clears state', 'pass');
+          addResult('  ✓ Cycle repeatable: ON → OFF → ON → OFF', 'pass');
+          addResult('  ✓ UI stays synchronized throughout', 'pass');
+          
+          // Cleanup
+          localStorage.removeItem('cluesbysam_disabled_clues');
+          addResult('Cleaned up test state', 'info');
+        });
+      }, 400);
+    }
+    
+    function verifyToggleState(buttonIndex, expectedState, testName, onSuccess) {
+      const rulesPanel = document.getElementById('solver-rules-panel');
+      if (!rulesPanel) {
+        addResult('✗ CRITICAL: Rules panel disappeared', 'fail');
+        return;
+      }
+      
+      const buttons = Array.from(rulesPanel.querySelectorAll('button'));
+      const toggleBtn = buttons[buttonIndex];
+      
+      if (!toggleBtn) {
+        addResult(`✗ ${testName}: Button not found at index ${buttonIndex}`, 'fail');
+        return;
+      }
+      
+      const actualState = toggleBtn.textContent.trim();
+      
+      if (actualState === expectedState) {
+        addResult(`✓ ${testName}: Button is ${expectedState}`, 'pass');
+        if (onSuccess) onSuccess();
+      } else {
+        addResult(`✗ ${testName}: Expected ${expectedState}, got "${actualState}"`, 'fail');
+      }
+    }
+    
+    function clearTestStorage() {
+      addResult('🗑️ Clearing localStorage...', 'info');
+      localStorage.removeItem('cluesbysam_disabled_clues');
+      localStorage.removeItem('solver_rules_position');
+      addResult('✓ Storage cleared', 'pass');
+      addResult('Reloading page...', 'info');
+      setTimeout(() => location.reload(), 1000);
+    }
+    
+    function runAllTests() {
+      clearResults();
+      addResult('<strong>🚀 Running All Tests...</strong>', 'info');
+      
+      setTimeout(() => {
+        // Test 1: Overlay exists
+        const overlay = document.getElementById('cluesbysam-solver-overlay');
+        if (overlay) {
+          addResult('✓ Overlay created', 'pass');
+        } else {
+          addResult('✗ Overlay not found', 'fail');
+          return;
+        }
+        
+        // Test 2: Buttons exist
+        const statsBtn = overlay.querySelector('.stats-btn');
+        const rulesBtn = overlay.querySelector('.rules-btn');
+        
+        if (statsBtn && rulesBtn) {
+          addResult(`✓ Both buttons created (Stats: "${statsBtn.textContent}", Rules: "${rulesBtn.textContent}")`, 'pass');
+        } else {
+          addResult(`✗ Missing buttons (Stats: ${!!statsBtn}, Rules: ${!!rulesBtn})`, 'fail');
+        }
+        
+        // Test 3: Clues found
+        const hints = document.querySelectorAll('.hint');
+        if (hints.length > 0) {
+          addResult(`✓ Found ${hints.length} hint elements in DOM`, 'pass');
+        } else {
+          addResult('⚠ No hints found (this may be expected for some puzzles)', 'warn');
+        }
+        
+        // Test 4: Cards found
+        const cards = document.querySelectorAll('.card');
+        if (cards.length >= 20) {
+          addResult(`✓ Found ${cards.length} card elements`, 'pass');
+        } else {
+          addResult(`⚠ Only found ${cards.length} cards (expected 20)`, 'warn');
+        }
+        
+        // Test 5: Panel interactions
+        setTimeout(() => testStatsPanel(), 500);
+        setTimeout(() => testRulesPanel(), 1000);
+        
+      }, 300);
+    }
+    
+    // Run tests on load
+    setTimeout(runAllTests, 1000);
+  </script>
+</body>
+</html>

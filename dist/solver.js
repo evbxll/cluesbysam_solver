@@ -1,9 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.compileClues = exports.solve = void 0;
+exports.compileClues = exports.solve = exports.compileDsl = exports.getClueTranslation = void 0;
 const board_1 = require("./board");
 const parser_rules_1 = require("./parser_rules");
 Object.defineProperty(exports, "compileClues", { enumerable: true, get: function () { return parser_rules_1.compileClues; } });
+var parser_rules_2 = require("./parser_rules");
+Object.defineProperty(exports, "getClueTranslation", { enumerable: true, get: function () { return parser_rules_2.getClueTranslation; } });
+Object.defineProperty(exports, "compileDsl", { enumerable: true, get: function () { return parser_rules_2.compileDsl; } });
 const masks = (0, board_1.buildMasks)();
 // fast popcount cache for values we see
 const popcountCache = new Map();
@@ -64,8 +67,8 @@ function evalConstraint(cons, C) {
             return (bitCount(bits) % 2 === (cons.odd ? 1 : 0));
         }
         case "COMPARE": {
-            const left = cons.wantCrim ? bitCount(C & cons.leftMask) : bitCount((~C & board_1.FULL_MASK) & cons.leftMask);
-            const right = cons.wantCrim ? bitCount(C & cons.rightMask) : bitCount((~C & board_1.FULL_MASK) & cons.rightMask);
+            const left = cons.leftWantCrim ? bitCount(C & cons.leftMask) : bitCount((~C & board_1.FULL_MASK) & cons.leftMask);
+            const right = cons.rightWantCrim ? bitCount(C & cons.rightMask) : bitCount((~C & board_1.FULL_MASK) & cons.rightMask);
             if (cons.op === ">")
                 return left > right;
             if (cons.op === "<")

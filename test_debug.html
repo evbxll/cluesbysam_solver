@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CluesBySam Solver Debug Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f0f0f0;
+    }
+    .test-result {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .pass { background: #d4edda; color: #155724; }
+    .fail { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    
+    /* Simulate CluesBySam structure */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin: 20px 0;
+    }
+    .card-container {
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+    .card {
+      background: white;
+      padding: 10px;
+      border-radius: 4px;
+      position: relative;
+    }
+    .card.flipped.innocent {
+      background: #d4edda;
+    }
+    .card.flipped.criminal {
+      background: #f8d7da;
+    }
+    .coord {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      font-size: 10px;
+      color: #666;
+    }
+    .name h3 {
+      margin: 0 0 5px 0;
+      font-size: 14px;
+    }
+    .profession {
+      font-size: 12px;
+      color: #666;
+    }
+    .card-back {
+      margin-top: 10px;
+      padding: 5px;
+      background: #f9f9f9;
+      border-radius: 3px;
+    }
+    .hint {
+      font-size: 11px;
+      color: #333;
+      margin: 3px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>CluesBySam Solver Debug Test</h1>
+  <div id="test-results"></div>
+  
+  <h2>Test Puzzle Board (5x4 = 20 cards)</h2>
+  <div class="card-grid" id="grid">
+    <!-- Row 1 -->
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">A1</div>
+        <div class="name"><h3 class="name">Alice</h3></div>
+        <div class="profession">Doctor</div>
+        <div class="card-back">
+          <div class="hint">Alice is innocent</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card flipped innocent">
+        <div class="coord">B1</div>
+        <div class="name"><h3>Bob</h3></div>
+        <div class="profession">Engineer</div>
+        <div class="card-back innocent">
+          <div class="hint">Bob has 2 innocent neighbors</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">C1</div>
+        <div class="name"><h3>Charlie</h3></div>
+        <div class="profession">Teacher</div>
+        <div class="card-back">
+          <div class="hint">Charlie is in the same row as a criminal</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">D1</div>
+        <div class="name"><h3>Diana</h3></div>
+        <div class="profession">Artist</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card flipped criminal">
+        <div class="coord">E1</div>
+        <div class="name"><h3>Eve</h3></div>
+        <div class="profession">Banker</div>
+        <div class="card-back criminal">
+          <div class="hint">Eve has exactly 1 criminal neighbor</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Row 2 -->
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">A2</div>
+        <div class="name"><h3>Frank</h3></div>
+        <div class="profession">Chef</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">B2</div>
+        <div class="name"><h3>Grace</h3></div>
+        <div class="profession">Nurse</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">C2</div>
+        <div class="name"><h3>Henry</h3></div>
+        <div class="profession">Lawyer</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">D2</div>
+        <div class="name"><h3>Iris</h3></div>
+        <div class="profession">Pilot</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">E2</div>
+        <div class="name"><h3>Jack</h3></div>
+        <div class="profession">Plumber</div>
+      </div>
+    </div>
+    
+    <!-- Row 3 -->
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">A3</div>
+        <div class="name"><h3>Kate</h3></div>
+        <div class="profession">Writer</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">B3</div>
+        <div class="name"><h3>Leo</h3></div>
+        <div class="profession">Driver</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">C3</div>
+        <div class="name"><h3>Mia</h3></div>
+        <div class="profession">Designer</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">D3</div>
+        <div class="name"><h3>Nick</h3></div>
+        <div class="profession">Accountant</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">E3</div>
+        <div class="name"><h3>Olivia</h3></div>
+        <div class="profession">Scientist</div>
+      </div>
+    </div>
+    
+    <!-- Row 4 -->
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">A4</div>
+        <div class="name"><h3>Paul</h3></div>
+        <div class="profession">Mechanic</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">B4</div>
+        <div class="name"><h3>Quinn</h3></div>
+        <div class="profession">Librarian</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">C4</div>
+        <div class="name"><h3>Rose</h3></div>
+        <div class="profession">Pharmacist</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">D4</div>
+        <div class="name"><h3>Sam</h3></div>
+        <div class="profession">Photographer</div>
+      </div>
+    </div>
+    <div class="card-container">
+      <div class="card">
+        <div class="coord">E4</div>
+        <div class="name"><h3>Tina</h3></div>
+        <div class="profession">Journalist</div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="dist/content.js"></script>
+  <script>
+    // Enable debug mode
+    localStorage.setItem('cluesbysam_debug', '1');
+    
+    const resultsDiv = document.getElementById('test-results');
+    
+    function addResult(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = `test-result ${type}`;
+      div.textContent = message;
+      resultsDiv.appendChild(div);
+    }
+    
+    // Wait a bit for the extension to initialize
+    setTimeout(() => {
+      addResult('Testing extension initialization...', 'info');
+      
+      // Test 1: Check if overlay exists
+      const overlay = document.getElementById('cluesbysam-solver-overlay');
+      if (overlay) {
+        addResult('✓ Overlay created successfully', 'pass');
+        addResult(`  Overlay contains: ${overlay.innerHTML.substring(0, 100)}...`, 'info');
+      } else {
+        addResult('✗ Overlay not found!', 'fail');
+      }
+      
+      // Test 2: Check if clues were found
+      setTimeout(() => {
+        const hints = document.querySelectorAll('.hint');
+        addResult(`Found ${hints.length} hint elements in DOM`, 'info');
+        
+        // Test 3: Check if cards were found
+        const cards = document.querySelectorAll('.card');
+        addResult(`Found ${cards.length} card elements in DOM`, cards.length >= 20 ? 'pass' : 'fail');
+        
+        // Test 4: Try to open stats panel
+        const statsBtn = overlay?.querySelector('.stats-btn');
+        if (statsBtn) {
+          addResult('✓ Stats button found', 'pass');
+          addResult('Clicking stats button...', 'info');
+          (statsBtn as HTMLElement).click();
+          
+          setTimeout(() => {
+            const statsPanel = document.getElementById('solver-stats-panel');
+            if (statsPanel) {
+              addResult('✓ Stats panel opened successfully', 'pass');
+              addResult(`  Panel content length: ${statsPanel.textContent?.length || 0} chars`, 'info');
+            } else {
+              addResult('✗ Stats panel failed to open!', 'fail');
+            }
+          }, 100);
+        } else {
+          addResult('✗ Stats button not found!', 'fail');
+        }
+        
+        // Test 5: Try to open rules panel
+        setTimeout(() => {
+          const rulesBtn = overlay?.querySelector('.rules-btn');
+          if (rulesBtn) {
+            addResult('✓ Rules button found', 'pass');
+            addResult('Clicking rules button...', 'info');
+            (rulesBtn as HTMLElement).click();
+            
+            setTimeout(() => {
+              const rulesPanel = document.getElementById('solver-rules-panel');
+              if (rulesPanel) {
+                addResult('✓ Rules panel opened successfully', 'pass');
+                const clueCount = rulesPanel.querySelectorAll('.rules-content > div:first-child').length;
+                addResult(`  Panel shows clue management UI`, 'info');
+              } else {
+                addResult('✗ Rules panel failed to open!', 'fail');
+              }
+            }, 100);
+          } else {
+            addResult('✗ Rules button not found!', 'fail');
+          }
+        }, 300);
+        
+      }, 200);
+      
+    }, 500);
+  </script>
+</body>
+</html>

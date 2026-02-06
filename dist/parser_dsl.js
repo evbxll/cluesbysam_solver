@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.compileClues = void 0;
+exports.compileDsl = exports.compileClues = void 0;
 const board_1 = require("./board");
 const masks = (0, board_1.buildMasks)();
 function tokenize(input) {
@@ -527,9 +527,9 @@ function compileDSL(dslInput, board) {
                 rightRole = rightRoleMatch[1].toLowerCase().startsWith("innoc") ? "innocent" : "criminal";
                 rightExpr = rightExprStr.slice(0, rightRoleMatch.index).trim();
             }
-            // Both sides should have the same role filter
-            const role = leftRole || rightRole;
-            const wantCrim = role === "innocent" ? false : true;
+            // Each side can have its own role filter
+            const leftWantCrim = leftRole === "criminal" ? true : false;
+            const rightWantCrim = rightRole === "criminal" ? true : false;
             const leftTokens = tokenize(leftExpr);
             const leftParser = new DSLParser(leftTokens, board);
             const leftParsedExpr = leftParser.parseExpression();
@@ -538,7 +538,7 @@ function compileDSL(dslInput, board) {
             const rightParser = new DSLParser(rightTokens, board);
             const rightParsedExpr = rightParser.parseExpression();
             const { mask: rightMask } = rightParser.evalSetExpr(rightParsedExpr);
-            out.push({ kind: "COMPARE", leftMask, rightMask, wantCrim, op });
+            out.push({ kind: "COMPARE", leftMask, rightMask, leftWantCrim, rightWantCrim, op });
         }
     }
     return out;
@@ -546,7 +546,9 @@ function compileDSL(dslInput, board) {
 function compileClues(clues, board) {
     // Try DSL parser first
     const out = [];
-    for (const clue of clues) {
+    for (const clueInput of clues) {
+        // Extract clue text (ClueWithSpeaker.text or plain string)
+        const clue = typeof clueInput === 'string' ? clueInput : clueInput.text;
         try {
             const constraints = compileDSL(clue, board);
             if (constraints.length > 0) {
@@ -560,3 +562,13 @@ function compileClues(clues, board) {
     return out;
 }
 exports.compileClues = compileClues;
+function compileDsl(dslStr, board) {
+    // Compile raw DSL string directly (for custom rules)
+    try {
+        return compileDSL(dslStr, board);
+    }
+    catch (e) {
+        return [];
+    }
+}
+exports.compileDsl = compileDsl;

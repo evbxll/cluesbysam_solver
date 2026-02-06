@@ -1,4 +1,4 @@
-import { BoardSnapshot } from "./types";
+import { BoardSnapshot, ClueWithSpeaker } from "./types";
 import { buildMasks, FULL_MASK, N_CELLS } from "./board";
 
 const masks = buildMasks();
@@ -12,7 +12,7 @@ export type CType =
   | { kind: "COUNT_GTE"; mask: number; wantCrim: boolean; k: number }
   | { kind: "COUNT_LTE"; mask: number; wantCrim: boolean; k: number }
   | { kind: "PARITY"; mask: number; wantCrim: boolean; odd: boolean }
-  | { kind: "COMPARE"; leftMask: number; rightMask: number; wantCrim: boolean; op: ">" | "<" | "==" }
+  | { kind: "COMPARE"; leftMask: number; rightMask: number; leftWantCrim: boolean; rightWantCrim: boolean; op: ">" | "<" | "==" }
   | { kind: "UNIQUE_COUNT_EQ"; groupMasks: number[]; wantCrim: boolean; k: number }
   | { kind: "NEIGHBOR_COUNT"; centerIdx: number; mask: number; wantCrim: boolean; k: number; qualifier?: "IN_ROW" | "ABOVE" | "BELOW"; qualifierMask?: number }
   | { kind: "CONN_ALL"; mask: number; wantCrim: boolean }
@@ -615,9 +615,9 @@ function compileDSL(dslInput: string, board: BoardSnapshot): CType[] {
         rightExpr = rightExprStr.slice(0, rightRoleMatch.index).trim();
       }
       
-      // Both sides should have the same role filter
-      const role = leftRole || rightRole;
-      const wantCrim = role === "innocent" ? false : true;
+      // Each side can have its own role filter
+      const leftWantCrim = leftRole === "criminal" ? true : false;
+      const rightWantCrim = rightRole === "criminal" ? true : false;
       
       const leftTokens = tokenize(leftExpr);
       const leftParser = new DSLParser(leftTokens, board);
@@ -629,17 +629,19 @@ function compileDSL(dslInput: string, board: BoardSnapshot): CType[] {
       const rightParsedExpr = rightParser.parseExpression();
       const { mask: rightMask } = rightParser.evalSetExpr(rightParsedExpr);
       
-      out.push({ kind: "COMPARE", leftMask, rightMask, wantCrim, op });
+      out.push({ kind: "COMPARE", leftMask, rightMask, leftWantCrim, rightWantCrim, op });
     }
   }
 
   return out;
 }
 
-export function compileClues(clues: string[], board: BoardSnapshot): CType[] {
+export function compileClues(clues: Array<string | ClueWithSpeaker>, board: BoardSnapshot): CType[] {
   // Try DSL parser first
   const out: CType[] = [];
-  for (const clue of clues) {
+  for (const clueInput of clues) {
+    // Extract clue text (ClueWithSpeaker.text or plain string)
+    const clue = typeof clueInput === 'string' ? clueInput : clueInput.text;
     try {
       const constraints = compileDSL(clue, board);
       if (constraints.length > 0) {
@@ -650,4 +652,13 @@ export function compileClues(clues: string[], board: BoardSnapshot): CType[] {
     }
   }
   return out;
+}
+
+export function compileDsl(dslStr: string, board: BoardSnapshot): CType[] {
+  // Compile raw DSL string directly (for custom rules)
+  try {
+    return compileDSL(dslStr, board);
+  } catch (e) {
+    return [];
+  }
 }

@@ -568,8 +568,8 @@
           rightRole = rightRoleMatch[1].toLowerCase().startsWith("innoc") ? "innocent" : "criminal";
           rightExpr = rightExprStr.slice(0, rightRoleMatch.index).trim();
         }
-        const role = leftRole || rightRole;
-        const wantCrim = role === "innocent" ? false : true;
+        const leftWantCrim = leftRole === "criminal" ? true : false;
+        const rightWantCrim = rightRole === "criminal" ? true : false;
         const leftTokens = tokenize(leftExpr);
         const leftParser = new DSLParser(leftTokens, board);
         const leftParsedExpr = leftParser.parseExpression();
@@ -578,14 +578,15 @@
         const rightParser = new DSLParser(rightTokens, board);
         const rightParsedExpr = rightParser.parseExpression();
         const { mask: rightMask } = rightParser.evalSetExpr(rightParsedExpr);
-        out.push({ kind: "COMPARE", leftMask, rightMask, wantCrim, op });
+        out.push({ kind: "COMPARE", leftMask, rightMask, leftWantCrim, rightWantCrim, op });
       }
     }
     return out;
   }
   function compileClues(clues, board) {
     const out = [];
-    for (const clue of clues) {
+    for (const clueInput of clues) {
+      const clue = typeof clueInput === "string" ? clueInput : clueInput.text;
       try {
         const constraints = compileDSL(clue, board);
         if (constraints.length > 0) {
@@ -595,6 +596,13 @@
       }
     }
     return out;
+  }
+  function compileDsl(dslStr, board) {
+    try {
+      return compileDSL(dslStr, board);
+    } catch (e) {
+      return [];
+    }
   }
 
   // src/parser_rules.ts
@@ -679,7 +687,7 @@
     },
     {
       pattern: "the only {role} in {rowcol} {rowcolval} is {name}'s neighbor",
-      dsl: "eq(1, area({rowcol}({rowcolval})@{role})) + in_group(area({rowcol}({rowcolval})@{role}), neighbor({name})@{role})"
+      dsl: "eq(1, area({rowcol}({rowcolval}))@{role}) + eq(1, (area({rowcol}({rowcolval})) & neighbor({name}))@{role})"
     },
     // ============================================================================
     // PARITY IN AREA
@@ -814,6 +822,10 @@
       dsl: "eq({k}, {dir}({name})@{role})"
     },
     {
+      pattern: "there are exactly {k} {role} between {name} and {name2}",
+      dsl: "eq({k}, between({name}, {name2})@{role})"
+    },
+    {
       pattern: "there are exactly {k} {role} in between {name} and {name2}",
       dsl: "eq({k}, between({name}, {name2})@{role})"
     },
@@ -909,6 +921,22 @@
     {
       pattern: "there's an equal number of {role} in {rowcol}s {rowcolval} and {rowcolval2}",
       dsl: "compare(area({rowcol}({rowcolval}))@{role}, ==, area({rowcol}({rowcolval2}))@{role})"
+    },
+    {
+      pattern: "{name} has more innocent than criminal neighbors",
+      dsl: "compare(neighbor({name})@innocent, >, neighbor({name})@criminal)"
+    },
+    {
+      pattern: "{name} has more criminal than innocent neighbors",
+      dsl: "compare(neighbor({name})@criminal, >, neighbor({name})@innocent)"
+    },
+    {
+      pattern: "{name} has more innocent neighbors than {name2}",
+      dsl: "compare(neighbor({name})@innocent, >, neighbor({name2})@innocent)"
+    },
+    {
+      pattern: "{name} has more criminal neighbors than {name2}",
+      dsl: "compare(neighbor({name})@criminal, >, neighbor({name2})@criminal)"
     }
   ];
   var tokenRegex = {
@@ -1017,7 +1045,20 @@
     } catch (e) {
     }
     const matchers = templates.map((t) => ({ ...t, ...buildMatcher(t.pattern) }));
-    for (const clue of clues) {
+    for (const clueInput of clues) {
+      let clue;
+      let speaker;
+      if (typeof clueInput === "string") {
+        clue = clueInput;
+      } else {
+        clue = clueInput.text;
+        speaker = clueInput.speaker;
+      }
+      if (speaker) {
+        clue = clue.replace(/\bI have\b/g, `${speaker} has`);
+        clue = clue.replace(/\bI am\b/g, `${speaker} is`);
+        clue = clue.replace(/\bI\b/g, speaker);
+      }
       const normalized = normalizeClue(clue);
       if (disabledClues.has(clue)) {
         continue;
@@ -1063,6 +1104,79 @@
       }
     }
     return out;
+  }
+  function getClueTranslation(clueInput, board) {
+    let clue;
+    let speaker;
+    if (typeof clueInput === "string") {
+      clue = clueInput;
+    } else {
+      clue = clueInput.text;
+      speaker = clueInput.speaker;
+    }
+    if (speaker) {
+      clue = clue.replace(/\bI have\b/g, `${speaker} has`);
+      clue = clue.replace(/\bI am\b/g, `${speaker} is`);
+      clue = clue.replace(/\bI\b/g, speaker);
+    }
+    const normalized = normalizeClue(clue);
+    let disabledClues = /* @__PURE__ */ new Set();
+    try {
+      if (typeof localStorage !== "undefined") {
+        const stored = localStorage.getItem("cluesbysam_disabled_clues");
+        if (stored) {
+          disabledClues = new Set(JSON.parse(stored));
+        }
+      }
+    } catch (e) {
+    }
+    if (disabledClues.has(clue)) {
+      return { dsl: null, constraints: [] };
+    }
+    let customRules = [];
+    try {
+      if (typeof localStorage !== "undefined") {
+        const stored = localStorage.getItem("cluesbysam_custom_rules");
+        if (stored) {
+          customRules = JSON.parse(stored);
+        }
+      }
+    } catch (e) {
+    }
+    for (const customRule of customRules) {
+      if (!customRule.enabled)
+        continue;
+      if (normalizeClue(customRule.clue) === normalized) {
+        try {
+          const constraints = compileClues([customRule.dsl], board);
+          if (constraints.length > 0) {
+            return { dsl: customRule.dsl, constraints };
+          }
+        } catch (e) {
+          console.error("Custom rule DSL error:", customRule, e);
+        }
+      }
+    }
+    const matchers = templates.map((t) => ({ ...t, ...buildMatcher(t.pattern) }));
+    for (const t of matchers) {
+      const m = normalized.match(t.regex);
+      if (!m)
+        continue;
+      if (t.dsl === "SKIP") {
+        continue;
+      }
+      const vars = {};
+      t.tokens.forEach((token, i) => {
+        vars[token] = m[i + 1];
+      });
+      const normalizedVars = normalizeVars(vars);
+      const dsl = fillTemplate(t.dsl, normalizedVars);
+      const constraints = compileClues([dsl], board);
+      if (constraints.length > 0) {
+        return { dsl, constraints };
+      }
+    }
+    return { dsl: null, constraints: [] };
   }
 
   // src/solver.ts
@@ -1123,8 +1237,8 @@
         return bitCount(bits) % 2 === (cons.odd ? 1 : 0);
       }
       case "COMPARE": {
-        const left = cons.wantCrim ? bitCount(C & cons.leftMask) : bitCount(~C & FULL_MASK & cons.leftMask);
-        const right = cons.wantCrim ? bitCount(C & cons.rightMask) : bitCount(~C & FULL_MASK & cons.rightMask);
+        const left = cons.leftWantCrim ? bitCount(C & cons.leftMask) : bitCount(~C & FULL_MASK & cons.leftMask);
+        const right = cons.rightWantCrim ? bitCount(C & cons.rightMask) : bitCount(~C & FULL_MASK & cons.rightMask);
         if (cons.op === ">")
           return left > right;
         if (cons.op === "<")
@@ -1270,10 +1384,6 @@
     if (isDebugEnabled())
       console.debug(...args);
   }
-  function infoLog(...args) {
-    if (isDebugEnabled())
-      console.info(...args);
-  }
   function textOf(el) {
     if (!el)
       return "";
@@ -1282,11 +1392,21 @@
   function findClueStrings() {
     debugLog("CluesBySam Solver: searching for clue strings...");
     const hints = [];
-    const backHints = document.querySelectorAll(".card-back .hint, .card .hint");
-    backHints.forEach((h) => {
-      const t = textOf(h);
-      if (t)
-        hints.push(t);
+    const cards = findCardElements();
+    cards.forEach((card, idx) => {
+      const cardHints = card.querySelectorAll(".card-back .hint, .card .hint, .hint");
+      cardHints.forEach((h) => {
+        const t = textOf(h);
+        if (t && t.length > 3) {
+          const nameEl = card.querySelector(".name h3.name, .name h3, h3");
+          const speaker = nameEl ? textOf(nameEl) : void 0;
+          const hintObj = { text: t, speaker };
+          if (!hints.some((existing) => existing.text === t)) {
+            hints.push(hintObj);
+            debugLog(`CluesBySam Solver: found hint "${t.substring(0, 50)}..." from ${speaker || "unknown"}`);
+          }
+        }
+      });
     });
     debugLog(`CluesBySam Solver: found ${hints.length} hints on card-backs`);
     if (hints.length > 0)
@@ -1297,19 +1417,28 @@
       if (container) {
         const items = Array.from(container.querySelectorAll("li, .clue-item, p, div"));
         const texts = items.map((it) => textOf(it)).filter((t) => t.length > 3);
-        if (texts.length > 0)
+        if (texts.length > 0) {
+          debugLog(`CluesBySam Solver: found ${texts.length} clues in container ${s}`);
           return texts;
+        }
       }
     }
     const nodes = Array.from(document.querySelectorAll("p, div, li"));
     const clues = [];
     for (const n of nodes) {
       const t = textOf(n);
-      if (/innocent|criminal|connected|neighbors?|row|column|only one|exactly|odd number/i.test(t) && t.length < 240 && t.length > 8)
-        clues.push(t);
+      if (/innocent|criminal|connected|neighbors?|row|column|only one|exactly|odd number/i.test(t) && t.length < 240 && t.length > 8) {
+        if (!clues.includes(t)) {
+          clues.push(t);
+        }
+      }
     }
     debugLog(`CluesBySam Solver: fallback found ${clues.length} candidate clue nodes`);
-    return clues.slice(0, 50);
+    const result = clues.slice(0, 50);
+    if (result.length === 0) {
+      debugLog("CluesBySam Solver: WARNING - No clues found at all! Page may not be loaded.");
+    }
+    return result;
   }
   function findCardElements() {
     debugLog("CluesBySam Solver: locating card elements (.card-grid #grid .card-container .card)");
@@ -1366,461 +1495,501 @@
     return { cells, clues };
   }
   var OVERLAY_ID = "cluesbysam-solver-overlay";
-  var RULES_PANEL_ID = "cluesbysam-rules-panel";
-  function getCustomRules() {
-    const stored = localStorage.getItem("cluesbysam_custom_rules");
-    return stored ? JSON.parse(stored) : [];
-  }
-  function saveCustomRules(rules) {
-    localStorage.setItem("cluesbysam_custom_rules", JSON.stringify(rules));
-  }
-  function ensureOverlay() {
-    let ov = document.getElementById(OVERLAY_ID);
-    if (!ov) {
-      ov = document.createElement("div");
-      ov.id = OVERLAY_ID;
-      ov.style.position = "fixed";
-      ov.style.right = "12px";
-      ov.style.bottom = "12px";
-      ov.style.zIndex = "999999";
-      ov.style.background = "rgba(0,0,0,0.7)";
-      ov.style.color = "white";
-      ov.style.padding = "8px 10px";
-      ov.style.borderRadius = "8px";
-      ov.style.minWidth = "220px";
-      ov.style.minHeight = "40px";
-      ov.style.border = "2px solid rgba(255,255,255,0.08)";
-      ov.style.pointerEvents = "auto";
-      ov.style.fontFamily = "sans-serif";
-      ov.style.fontSize = "13px";
-      document.body.appendChild(ov);
-      const rulesBtn = document.createElement("button");
-      rulesBtn.textContent = "\u2699 Rules";
-      rulesBtn.style.cssText = "margin-top:8px;padding:4px 8px;background:#444;color:#fff;border:1px solid #666;border-radius:4px;cursor:pointer;font-size:12px;";
-      rulesBtn.onclick = () => toggleRulesPanel();
-      ov.appendChild(rulesBtn);
-      debugLog("CluesBySam Solver: overlay created");
-    }
-    return ov;
-  }
-  function toggleRulesPanel() {
-    let panel = document.getElementById(RULES_PANEL_ID);
-    if (panel) {
-      panel.remove();
-      return;
-    }
-    panel = document.createElement("div");
-    panel.id = RULES_PANEL_ID;
-    panel.style.cssText = `
-    position: fixed;
-    top: 50px;
-    right: 20px;
-    z-index: 1000000;
-    background: #1e1e1e;
-    color: #e0e0e0;
-    padding: 20px;
-    border-radius: 8px;
-    width: 600px;
-    height: 700px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    font-family: monospace;
-    font-size: 12px;
-    display: flex;
-    flex-direction: column;
-    resize: both;
-    overflow: hidden;
-  `;
-    const header = document.createElement("div");
-    header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-shrink:0;";
-    const title = document.createElement("h3");
-    title.textContent = "\u2699 Clue Rules Manager";
-    title.style.cssText = "margin:0;color:#4fc3f7;font-size:16px;";
-    header.appendChild(title);
-    const closeBtn = document.createElement("button");
-    closeBtn.textContent = "\u2715";
-    closeBtn.style.cssText = "background:#c00;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:14px;font-weight:bold;";
-    closeBtn.onclick = () => panel?.remove();
-    header.appendChild(closeBtn);
-    panel.appendChild(header);
-    const content = document.createElement("div");
-    content.style.cssText = "flex:1;overflow-y:auto;overflow-x:hidden;";
-    const snapshot = buildBoardSnapshotFromDOM();
-    renderClueTranslations(content, snapshot);
-    renderCustomRuleForm(content);
-    panel.appendChild(content);
-    document.body.appendChild(panel);
-  }
-  function renderClueTranslations(container, snapshot) {
-    const section = document.createElement("div");
-    section.style.marginBottom = "24px";
-    const heading = document.createElement("h4");
-    heading.textContent = "\u{1F4CB} Puzzle Clues";
-    heading.style.cssText = "margin:0 0 4px 0;color:#4fc3f7;font-size:14px;";
-    section.appendChild(heading);
-    const desc = document.createElement("p");
-    desc.textContent = "Click checkbox to enable/disable clues. Disabled clues are grayed out and excluded from solver.";
-    desc.style.cssText = "margin:0 0 12px 0;color:#999;font-size:11px;";
-    section.appendChild(desc);
-    if (snapshot.clues.length === 0) {
-      const noClues = document.createElement("div");
-      noClues.textContent = "No clues found on this page";
-      noClues.style.cssText = "color:#888;font-style:italic;padding:8px;";
-      section.appendChild(noClues);
-      container.appendChild(section);
-      return;
-    }
-    let disabledClues;
+  var sessionCustomRules = [];
+  function getUIState() {
     try {
-      const stored = localStorage.getItem("cluesbysam_disabled_clues");
-      disabledClues = stored ? new Set(JSON.parse(stored)) : /* @__PURE__ */ new Set();
-    } catch {
-      disabledClues = /* @__PURE__ */ new Set();
-    }
-    snapshot.clues.forEach((clue, idx) => {
-      const isDisabled = disabledClues.has(clue);
-      const clueDiv = document.createElement("div");
-      clueDiv.style.cssText = `margin-bottom:14px;padding:10px;background:${isDisabled ? "#1a1a1a" : "#2a2a2a"};border-radius:4px;border-left:4px solid ${isDisabled ? "#555" : "#4fc3f7"};transition:all 0.2s;`;
-      const headerRow = document.createElement("div");
-      headerRow.style.cssText = "display:flex;align-items:center;margin-bottom:6px;";
-      const toggleBtn = document.createElement("button");
-      toggleBtn.textContent = isDisabled ? "\u2610 OFF" : "\u2611 ON";
-      toggleBtn.style.cssText = `padding:4px 8px;margin-right:10px;background:${isDisabled ? "#666" : "#51cf66"};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;font-weight:bold;`;
-      toggleBtn.title = isDisabled ? "Click to enable this clue" : "Click to disable this clue";
-      toggleBtn.onclick = () => {
-        if (isDisabled) {
-          disabledClues.delete(clue);
-        } else {
-          disabledClues.add(clue);
-        }
-        localStorage.setItem("cluesbysam_disabled_clues", JSON.stringify([...disabledClues]));
-        toggleRulesPanel();
-        toggleRulesPanel();
-      };
-      headerRow.appendChild(toggleBtn);
-      const clueText = document.createElement("span");
-      clueText.textContent = `#${idx + 1}: ${clue}`;
-      clueText.style.cssText = `font-weight:bold;color:${isDisabled ? "#888" : "#fff"};flex:1;`;
-      headerRow.appendChild(clueText);
-      clueDiv.appendChild(headerRow);
-      try {
-        const constraints = compileClues2([clue], snapshot);
-        const statusDiv = document.createElement("div");
-        statusDiv.style.cssText = "margin-left:76px;margin-top:4px;";
-        if (constraints.length === 0) {
-          statusDiv.innerHTML = `<span style="color:#ff6b6b;font-weight:bold;">\u274C NOT TRANSLATED</span> <span style="color:#999;font-size:10px;">(no matching pattern found)</span>`;
-        } else {
-          statusDiv.innerHTML = `<span style="color:#51cf66;font-weight:bold;">\u2713 ACTIVE</span> <span style="color:#aaa;font-size:10px;">(${constraints.length} constraint${constraints.length > 1 ? "s" : ""} generated)</span>`;
-          const detailsDiv = document.createElement("div");
-          detailsDiv.style.cssText = "margin-top:6px;padding:8px;background:#1a1a1a;border-radius:3px;font-size:10px;color:#aaa;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #333;";
-          const constraintsSummary = constraints.map((c, i) => {
-            const lines = [`Constraint ${i + 1}: ${c.kind}`];
-            Object.entries(c).forEach(([key, value]) => {
-              if (key !== "kind") {
-                if (typeof value === "number") {
-                  lines.push(`  ${key}: ${value}`);
-                } else if (key === "op") {
-                  lines.push(`  ${key}: "${value}"`);
-                } else {
-                  lines.push(`  ${key}: ${value}`);
-                }
-              }
-            });
-            return lines.join("\n");
-          }).join("\n\n");
-          detailsDiv.textContent = constraintsSummary;
-          statusDiv.appendChild(detailsDiv);
-        }
-        clueDiv.appendChild(statusDiv);
-      } catch (e) {
-        const errorDiv = document.createElement("div");
-        errorDiv.innerHTML = `<span style="color:#ff6b6b;font-weight:bold;">\u274C ERROR:</span> <span style="color:#ff8888;">${e}</span>`;
-        errorDiv.style.cssText = "margin-top:6px;margin-left:76px;font-size:11px;";
-        clueDiv.appendChild(errorDiv);
-      }
-      section.appendChild(clueDiv);
-    });
-    container.appendChild(section);
-  }
-  function renderCustomRuleForm(container) {
-    const section = document.createElement("div");
-    section.style.cssText = "border-top:2px solid #333;padding-top:20px;margin-top:20px;";
-    const heading = document.createElement("h4");
-    heading.textContent = "\u2795 Add Custom Rule";
-    heading.style.cssText = "margin:0 0 4px 0;color:#ffd43b;font-size:14px;";
-    section.appendChild(heading);
-    const desc = document.createElement("p");
-    desc.textContent = "Create custom clue\u2192DSL mappings for patterns not supported by built-in rules.";
-    desc.style.cssText = "margin:0 0 12px 0;color:#999;font-size:11px;line-height:1.4;";
-    section.appendChild(desc);
-    const form = document.createElement("div");
-    form.style.cssText = "padding:14px;background:#2a2a2a;border-radius:6px;margin-bottom:16px;border:1px solid #444;";
-    const clueLabel = document.createElement("label");
-    clueLabel.textContent = "Clue Text:";
-    clueLabel.style.cssText = "display:block;margin-bottom:4px;color:#ddd;font-size:11px;font-weight:bold;";
-    form.appendChild(clueLabel);
-    const clueInput = document.createElement("input");
-    clueInput.type = "text";
-    clueInput.placeholder = "e.g., Gary has exactly 3 innocent neighbors";
-    clueInput.style.cssText = "width:100%;padding:8px;margin-bottom:12px;background:#1a1a1a;color:#fff;border:1px solid #555;border-radius:4px;font-size:12px;box-sizing:border-box;";
-    form.appendChild(clueInput);
-    const dslLabel = document.createElement("label");
-    dslLabel.textContent = "DSL Expression:";
-    dslLabel.style.cssText = "display:block;margin-bottom:4px;color:#ddd;font-size:11px;font-weight:bold;";
-    form.appendChild(dslLabel);
-    const dslInput = document.createElement("input");
-    dslInput.type = "text";
-    dslInput.placeholder = "e.g., eq(3, neighbor(gary)@innocent)";
-    dslInput.style.cssText = "width:100%;padding:8px;margin-bottom:12px;background:#1a1a1a;color:#fff;border:1px solid #555;border-radius:4px;font-family:monospace;font-size:11px;box-sizing:border-box;";
-    form.appendChild(dslInput);
-    const addBtn = document.createElement("button");
-    addBtn.textContent = "\u2795 Add Custom Rule";
-    addBtn.style.cssText = "padding:8px 16px;background:#4fc3f7;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:12px;";
-    addBtn.onmouseover = () => addBtn.style.background = "#6dd5ff";
-    addBtn.onmouseout = () => addBtn.style.background = "#4fc3f7";
-    addBtn.onclick = () => {
-      const clue = clueInput.value.trim();
-      const dsl = dslInput.value.trim();
-      if (!clue || !dsl) {
-        alert("\u26A0\uFE0F Both clue text and DSL expression are required");
-        return;
-      }
-      const customRules2 = getCustomRules();
-      customRules2.push({ clue, dsl, enabled: true });
-      saveCustomRules(customRules2);
-      clueInput.value = "";
-      dslInput.value = "";
-      toggleRulesPanel();
-      toggleRulesPanel();
-    };
-    form.appendChild(addBtn);
-    section.appendChild(form);
-    const customRules = getCustomRules();
-    if (customRules.length > 0) {
-      const listHeading = document.createElement("h5");
-      listHeading.textContent = `\u{1F4DD} Your Custom Rules (${customRules.length})`;
-      listHeading.style.cssText = "margin:20px 0 10px 0;color:#ffd43b;font-size:13px;";
-      section.appendChild(listHeading);
-      customRules.forEach((rule, idx) => {
-        const ruleDiv = document.createElement("div");
-        ruleDiv.style.cssText = `margin-bottom:10px;padding:10px;background:${rule.enabled ? "#2a2a2a" : "#1a1a1a"};border-radius:4px;border:1px solid ${rule.enabled ? "#444" : "#333"};display:flex;align-items:flex-start;gap:8px;`;
-        const btnContainer = document.createElement("div");
-        btnContainer.style.cssText = "display:flex;flex-direction:column;gap:4px;";
-        const toggleBtn = document.createElement("button");
-        toggleBtn.textContent = rule.enabled ? "ON" : "OFF";
-        toggleBtn.title = rule.enabled ? "Click to disable" : "Click to enable";
-        toggleBtn.style.cssText = `padding:4px 8px;background:${rule.enabled ? "#51cf66" : "#666"};color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;font-weight:bold;`;
-        toggleBtn.onclick = () => {
-          customRules[idx].enabled = !customRules[idx].enabled;
-          saveCustomRules(customRules);
-          toggleRulesPanel();
-          toggleRulesPanel();
-        };
-        btnContainer.appendChild(toggleBtn);
-        const deleteBtn = document.createElement("button");
-        deleteBtn.textContent = "DEL";
-        deleteBtn.title = "Delete this custom rule";
-        deleteBtn.style.cssText = "padding:4px 8px;background:#c92a2a;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;font-weight:bold;";
-        deleteBtn.onclick = () => {
-          if (confirm(`Delete custom rule?
-
-"${rule.clue}"`)) {
-            customRules.splice(idx, 1);
-            saveCustomRules(customRules);
-            toggleRulesPanel();
-            toggleRulesPanel();
-          }
-        };
-        btnContainer.appendChild(deleteBtn);
-        ruleDiv.appendChild(btnContainer);
-        const textContainer = document.createElement("div");
-        textContainer.style.cssText = "flex:1;";
-        const clueText = document.createElement("div");
-        clueText.textContent = `"${rule.clue}"`;
-        clueText.style.cssText = `color:${rule.enabled ? "#fff" : "#888"};font-weight:bold;font-size:11px;margin-bottom:4px;`;
-        textContainer.appendChild(clueText);
-        const dslText = document.createElement("div");
-        dslText.textContent = `\u2192 ${rule.dsl}`;
-        dslText.style.cssText = `color:${rule.enabled ? "#aaa" : "#666"};font-family:monospace;font-size:10px;`;
-        textContainer.appendChild(dslText);
-        ruleDiv.appendChild(textContainer);
-        section.appendChild(ruleDiv);
-      });
-    }
-    container.appendChild(section);
-  }
-  function highlightForcedCells(forced) {
-    const cardEls = findCardElements();
-    for (let i = 0; i < cardEls.length && i < 20; i++) {
-      const el = cardEls[i];
-      if (!el)
-        continue;
-      el.style.outline = "";
-      el.style.boxShadow = "";
-    }
-    for (const f of forced) {
-      const el = cardEls[f.id];
-      if (!el)
-        continue;
-      if (f.status === "CRIMINAL") {
-        el.style.outline = "3px solid rgba(220,50,50,0.9)";
-        el.style.boxShadow = "0 0 8px rgba(220,50,50,0.35)";
-      } else {
-        el.style.outline = "3px solid rgba(50,180,90,0.9)";
-        el.style.boxShadow = "0 0 8px rgba(50,180,90,0.35)";
-      }
-    }
-  }
-  var lastSnapshotJson = "";
-  var observer = null;
-  var prevClues = [];
-  var prevStatuses = {};
-  function runSolveAndUpdateUI() {
-    try {
-      debugLog("CluesBySam Solver: runSolveAndUpdateUI called");
       const snapshot = buildBoardSnapshotFromDOM();
-      debugLog("CluesBySam Solver: snapshot built", snapshot);
-      const json = JSON.stringify({ cells: snapshot.cells.map((c) => ({ id: c.id, status: c.status })), cluesCount: snapshot.clues.length });
-      if (json === lastSnapshotJson)
-        return;
-      lastSnapshotJson = json;
-      try {
-        if (isDebugEnabled()) {
-          for (let i = 0; i < snapshot.clues.length; i++) {
-            const c = snapshot.clues[i];
-            const ast = compileClues2([c], snapshot);
-            debugLog(`Clue[${i}]:`, c, "->", ast);
-          }
-        }
-        const added = snapshot.clues.filter((x) => !prevClues.includes(x));
-        const removed = prevClues.filter((x) => !snapshot.clues.includes(x));
-        if (added.length)
-          infoLog("CluesBySam Solver: new clues added:", added);
-        if (removed.length)
-          infoLog("CluesBySam Solver: clues removed:", removed);
-        prevClues = snapshot.clues.slice();
-      } catch (e) {
-        console.error("CluesBySam Solver: error compiling clues", e);
-      }
-      const statusChanges = [];
-      for (const c of snapshot.cells) {
-        const prev2 = prevStatuses[String(c.id)];
-        if (prev2 !== void 0 && prev2 !== c.status)
-          statusChanges.push(`${c.pos || "?"} ${c.name}: ${prev2} -> ${c.status}`);
-        prevStatuses[String(c.id)] = c.status;
-      }
-      if (statusChanges.length)
-        infoLog("CluesBySam Solver: status changes detected:", statusChanges);
-      let disabledClues;
+      debugLog(`CluesBySam Solver: snapshot has ${snapshot.cells.length} cells, ${snapshot.clues.length} clues`);
+      const disabledClues = /* @__PURE__ */ new Set();
       try {
         const stored = localStorage.getItem("cluesbysam_disabled_clues");
-        disabledClues = stored ? new Set(JSON.parse(stored)) : /* @__PURE__ */ new Set();
+        if (stored)
+          JSON.parse(stored).forEach((c) => disabledClues.add(c));
       } catch {
-        disabledClues = /* @__PURE__ */ new Set();
       }
-      const activeSnapshot = {
-        ...snapshot,
-        clues: snapshot.clues.filter((c) => !disabledClues.has(c))
-      };
+      const activeClues = snapshot.clues.filter((c) => {
+        const clueText = typeof c === "string" ? c : c.text;
+        return !disabledClues.has(clueText);
+      });
+      const allClues = [...activeClues, ...sessionCustomRules.map((r) => r.dsl)];
+      const activeSnapshot = { ...snapshot, clues: allClues };
+      debugLog(`CluesBySam Solver: running solver with ${allClues.length} active clues...`);
       const suggestion = solve(activeSnapshot);
-      debugLog("Solver suggestion:", suggestion);
-      const ov = ensureOverlay();
-      let statsDiv = ov.querySelector(".solver-stats");
-      if (!statsDiv) {
-        statsDiv = document.createElement("div");
-        statsDiv.className = "solver-stats";
-        ov.insertBefore(statsDiv, ov.firstChild);
+      debugLog(`CluesBySam Solver: solver found ${suggestion.numSolutions} solutions, ${suggestion.forced.length} forced cells`);
+      return { snapshot, disabledClues, suggestion };
+    } catch (error) {
+      console.error("CluesBySam Solver: ERROR in getUIState:", error);
+      return {
+        snapshot: { cells: [], clues: [] },
+        disabledClues: /* @__PURE__ */ new Set(),
+        suggestion: { numSolutions: 0, forced: [], solutions: [] }
+      };
+    }
+  }
+  var SolverUI = class {
+    constructor() {
+      this.overlay = null;
+      this.statsPanel = null;
+      this.rulesPanel = null;
+    }
+    // Update all UI components
+    update() {
+      try {
+        debugLog("CluesBySam Solver: update() called");
+        const state = getUIState();
+        this.updateOverlay(state);
+        this.updateStatsPanel(state);
+        this.updateRulesPanel(state);
+        this.highlightCells(state);
+        debugLog("CluesBySam Solver: update() completed successfully");
+      } catch (error) {
+        console.error("CluesBySam Solver: ERROR in update():", error);
       }
-      const lines = [];
-      lines.push(`Solutions: ${suggestion.numSolutions}`);
-      lines.push(`Forced: ${suggestion.forced.length}`);
-      statsDiv.innerText = lines.join("\n");
-      let details = ov.querySelector(".solver-details");
-      if (!details) {
-        details = document.createElement("div");
-        details.className = "solver-details";
-        details.style.marginTop = "8px";
-        details.style.maxHeight = "240px";
-        details.style.overflow = "auto";
-        details.style.fontSize = "12px";
-        details.style.whiteSpace = "pre-wrap";
-        ov.appendChild(details);
+    }
+    updateOverlay(state) {
+      if (!this.overlay) {
+        this.overlay = document.createElement("div");
+        this.overlay.id = OVERLAY_ID;
+        Object.assign(this.overlay.style, {
+          position: "fixed",
+          right: "12px",
+          bottom: "12px",
+          zIndex: "999999",
+          display: "flex",
+          gap: "8px"
+        });
+        document.body.appendChild(this.overlay);
+        debugLog("CluesBySam Solver: created overlay");
       }
-      const clueText = snapshot.clues.length ? snapshot.clues.join("\n") : "(no clues found)";
-      const statusLines = snapshot.cells.map((c) => `${c.pos || "?"} ${c.name}: ${c.status}`).join("\n");
-      const prev = window.localStorage.getItem("cluesbysam_prev_statuses");
-      const prevMap = prev ? JSON.parse(prev) : {};
-      const nowMap = {};
-      const newLabels = [];
-      for (const c of snapshot.cells) {
-        nowMap[String(c.id)] = c.status;
-        if (prevMap[String(c.id)] && prevMap[String(c.id)] !== c.status)
-          newLabels.push(`${c.pos || "?"} ${c.name}: ${prevMap[String(c.id)]} \u2192 ${c.status}`);
+      let statsBtn = this.overlay.querySelector(".stats-btn");
+      let rulesBtn = this.overlay.querySelector(".rules-btn");
+      if (!statsBtn) {
+        statsBtn = document.createElement("button");
+        statsBtn.className = "solver-btn stats-btn";
+        statsBtn.style.cssText = "padding:8px 12px;background:#4fc3f7;color:#000;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;box-shadow:0 2px 4px rgba(0,0,0,0.3);";
+        statsBtn.addEventListener("click", () => this.toggleStatsPanel());
+        statsBtn.addEventListener("mouseenter", (e) => e.target.style.opacity = "0.9");
+        statsBtn.addEventListener("mouseleave", (e) => e.target.style.opacity = "1");
+        this.overlay.appendChild(statsBtn);
+        debugLog("CluesBySam Solver: created stats button");
       }
-      window.localStorage.setItem("cluesbysam_prev_statuses", JSON.stringify(nowMap));
-      details.innerText = `CLUES:
-${clueText}
-
-STATUSES:
-${statusLines}
-
-NEW LABELS:
-${newLabels.length ? newLabels.join("\n") : "(none)"}
-`;
-      highlightForcedCells(suggestion.forced);
-    } catch (e) {
-      console.error("Solver error:", e);
-      if (isDebugEnabled()) {
+      if (!rulesBtn) {
+        rulesBtn = document.createElement("button");
+        rulesBtn.className = "solver-btn rules-btn";
+        rulesBtn.style.cssText = "padding:8px 12px;background:#ffd43b;color:#000;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;box-shadow:0 2px 4px rgba(0,0,0,0.3);";
+        rulesBtn.addEventListener("click", () => this.toggleRulesPanel());
+        rulesBtn.addEventListener("mouseenter", (e) => e.target.style.opacity = "0.9");
+        rulesBtn.addEventListener("mouseleave", (e) => e.target.style.opacity = "1");
+        this.overlay.appendChild(rulesBtn);
+        debugLog("CluesBySam Solver: created rules button");
+      }
+      statsBtn.textContent = `\u{1F4CA} ${state.suggestion.numSolutions}/${state.suggestion.forced.length}`;
+      rulesBtn.textContent = "\u2699\uFE0F Rules";
+    }
+    toggleStatsPanel() {
+      debugLog("CluesBySam Solver: toggleStatsPanel called");
+      if (this.statsPanel) {
+        this.statsPanel.remove();
+        this.statsPanel = null;
+        debugLog("CluesBySam Solver: stats panel closed");
+      } else {
+        this.createStatsPanel();
+        const state = getUIState();
+        this.updateStatsPanel(state);
+        debugLog("CluesBySam Solver: stats panel opened");
+      }
+    }
+    createStatsPanel() {
+      this.statsPanel = document.createElement("div");
+      this.statsPanel.id = "solver-stats-panel";
+      Object.assign(this.statsPanel.style, {
+        position: "fixed",
+        bottom: "60px",
+        right: "12px",
+        zIndex: "1000000",
+        background: "#1e1e1e",
+        color: "#e0e0e0",
+        padding: "16px",
+        borderRadius: "8px",
+        width: "400px",
+        maxHeight: "600px",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+        fontFamily: "system-ui, -apple-system, sans-serif",
+        fontSize: "13px"
+      });
+      const header = this.createPanelHeader("\u{1F4CA} Stats", () => this.toggleStatsPanel());
+      this.statsPanel.appendChild(header);
+      const content = document.createElement("div");
+      content.className = "stats-content";
+      content.style.cssText = "margin-top:12px;max-height:500px;overflow-y:auto;";
+      this.statsPanel.appendChild(content);
+      document.body.appendChild(this.statsPanel);
+      this.makeDraggable(this.statsPanel, header);
+    }
+    updateStatsPanel(state) {
+      if (!this.statsPanel)
+        return;
+      const content = this.statsPanel.querySelector(".stats-content");
+      if (!content) {
+        console.warn("CluesBySam Solver: stats panel exists but content element not found");
+        return;
+      }
+      content.innerHTML = `
+      <div style="margin-bottom:16px;padding:12px;background:#2a2a2a;border-radius:6px;border-left:3px solid #4fc3f7;">
+        <div style="font-weight:bold;color:#4fc3f7;margin-bottom:8px;">Solver Results</div>
+        <div style="color:#aaa;line-height:1.8;">
+          <div>Solutions: <span style="color:#51cf66;font-weight:bold;">${state.suggestion.numSolutions}</span></div>
+          <div>Forced: <span style="color:#ffd43b;font-weight:bold;">${state.suggestion.forced.length}</span></div>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;padding:12px;background:#2a2a2a;border-radius:6px;border-left:3px solid #ffd43b;">
+        <div style="font-weight:bold;color:#ffd43b;margin-bottom:8px;">Clues (${state.snapshot.clues.length})</div>
+        <div style="color:#aaa;font-size:11px;max-height:120px;overflow-y:auto;line-height:1.6;">
+          ${state.snapshot.clues.length ? state.snapshot.clues.map((c, i) => `${i + 1}. ${typeof c === "string" ? c : c.text}`).join("<br>") : "(no clues)"}
+        </div>
+      </div>
+      <div style="padding:12px;background:#2a2a2a;border-radius:6px;border-left:3px solid #51cf66;">
+        <div style="font-weight:bold;color:#51cf66;margin-bottom:8px;">Cell Status</div>
+        <div style="color:#aaa;font-size:11px;max-height:120px;overflow-y:auto;font-family:monospace;line-height:1.6;">
+          ${state.snapshot.cells.map((c) => `${c.pos || "?"} ${c.name}: ${c.status}`).join("<br>")}
+        </div>
+      </div>
+    `;
+    }
+    toggleRulesPanel() {
+      debugLog("CluesBySam Solver: toggleRulesPanel called");
+      if (this.rulesPanel) {
+        this.rulesPanel.remove();
+        this.rulesPanel = null;
+        debugLog("CluesBySam Solver: rules panel closed");
+      } else {
+        this.createRulesPanel();
+        const state = getUIState();
+        this.updateRulesPanel(state);
+        debugLog("CluesBySam Solver: rules panel opened");
+      }
+    }
+    createRulesPanel() {
+      this.rulesPanel = document.createElement("div");
+      this.rulesPanel.id = "solver-rules-panel";
+      let pos = { top: 50, left: window.innerWidth - 650 };
+      try {
+        const saved = localStorage.getItem("solver_rules_position");
+        if (saved)
+          pos = JSON.parse(saved);
+      } catch {
+      }
+      Object.assign(this.rulesPanel.style, {
+        position: "fixed",
+        top: pos.top + "px",
+        left: pos.left + "px",
+        zIndex: "1000000",
+        background: "#1e1e1e",
+        color: "#e0e0e0",
+        padding: "16px",
+        borderRadius: "8px",
+        width: "600px",
+        height: "700px",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+        fontFamily: "system-ui, -apple-system, sans-serif",
+        fontSize: "13px",
+        resize: "both",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column"
+      });
+      const header = this.createPanelHeader("\u2699\uFE0F Rules Manager", () => this.toggleRulesPanel());
+      this.rulesPanel.appendChild(header);
+      const content = document.createElement("div");
+      content.className = "rules-content";
+      content.style.cssText = "margin-top:12px;flex:1;overflow-y:auto;pointer-events:auto;";
+      this.rulesPanel.appendChild(content);
+      document.body.appendChild(this.rulesPanel);
+      this.rulesPanel.addEventListener("click", (e) => {
+        debugLog(`CluesBySam Solver: Click in rules panel - target: ${e.target.tagName}, className: ${e.target.className}`);
+      }, true);
+      this.makeDraggable(this.rulesPanel, header, () => {
         try {
-          const snapshot = buildBoardSnapshotFromDOM();
-          console.error("CluesBySam Solver: clues", snapshot.clues);
-          console.error("CluesBySam Solver: statuses", snapshot.cells.map((c) => ({ id: c.id, pos: c.pos, name: c.name, status: c.status })));
-          console.error("CluesBySam Solver: board state summary");
-          let crimCount = 0, innocCount = 0, unknownCount = 0;
-          for (const c of snapshot.cells) {
-            if (c.status === "CRIMINAL")
-              crimCount++;
-            else if (c.status === "INNOCENT")
-              innocCount++;
-            else
-              unknownCount++;
+          localStorage.setItem("solver_rules_position", JSON.stringify({
+            top: this.rulesPanel.offsetTop,
+            left: this.rulesPanel.offsetLeft
+          }));
+        } catch {
+        }
+      });
+    }
+    updateRulesPanel(state) {
+      if (!this.rulesPanel)
+        return;
+      const content = this.rulesPanel.querySelector(".rules-content");
+      if (!content) {
+        console.warn("CluesBySam Solver: rules panel exists but content element not found");
+        return;
+      }
+      content.innerHTML = "";
+      this.renderCluesList(content, state);
+      this.renderCustomRulesForm(content, state);
+    }
+    renderCluesList(container, state) {
+      const section = document.createElement("div");
+      section.style.marginBottom = "20px";
+      const heading = document.createElement("div");
+      heading.style.cssText = "font-weight:bold;color:#4fc3f7;margin-bottom:12px;font-size:14px;";
+      heading.textContent = `\u{1F4CB} Clues (${state.snapshot.clues.length})`;
+      section.appendChild(heading);
+      if (state.snapshot.clues.length === 0) {
+        section.innerHTML += '<div style="color:#888;font-style:italic;padding:8px;">No clues found</div>';
+        container.appendChild(section);
+        return;
+      }
+      state.snapshot.clues.forEach((clueInput, idx) => {
+        const clue = typeof clueInput === "string" ? clueInput : clueInput.text;
+        const speaker = typeof clueInput === "string" ? void 0 : clueInput.speaker;
+        const isDisabled = state.disabledClues.has(clue);
+        const clueDiv = document.createElement("div");
+        clueDiv.style.cssText = `margin-bottom:12px;padding:10px;background:${isDisabled ? "#1a1a1a" : "#2a2a2a"};border-radius:6px;border-left:3px solid ${isDisabled ? "#555" : "#4fc3f7"};`;
+        const clueHeader = document.createElement("div");
+        clueHeader.style.cssText = "display:flex;align-items:center;gap:8px;";
+        const toggle = document.createElement("button");
+        toggle.textContent = isDisabled ? "\u2610" : "\u2611";
+        toggle.style.cssText = `width:24px;height:24px;padding:0;background:${isDisabled ? "#555" : "#51cf66"};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;pointer-events:auto;`;
+        toggle.setAttribute("type", "button");
+        toggle.setAttribute("aria-label", `Toggle clue ${idx + 1}`);
+        toggle.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            debugLog(`CluesBySam Solver: CLICK EVENT on toggle button for clue #${idx + 1}`);
+            const stored = localStorage.getItem("cluesbysam_disabled_clues");
+            const disabledSet = new Set(stored ? JSON.parse(stored) : []);
+            const wasDisabled = disabledSet.has(clue);
+            debugLog(`CluesBySam Solver: toggle clicked for "${clue.substring(0, 30)}...", currently disabled: ${wasDisabled}`);
+            if (disabledSet.has(clue)) {
+              disabledSet.delete(clue);
+              debugLog(`CluesBySam Solver: ENABLED clue "${clue.substring(0, 30)}..."`);
+            } else {
+              disabledSet.add(clue);
+              debugLog(`CluesBySam Solver: DISABLED clue "${clue.substring(0, 30)}..."`);
+            }
+            const disabledArray = [...disabledSet];
+            localStorage.setItem("cluesbysam_disabled_clues", JSON.stringify(disabledArray));
+            debugLog(`CluesBySam Solver: saved to localStorage: ${disabledArray.length} disabled clue(s)`);
+            this.update();
+            debugLog(`CluesBySam Solver: update() called after toggle`);
+          } catch (error) {
+            console.error("CluesBySam Solver: error toggling clue:", error);
           }
-          console.error(`  Criminals: ${crimCount}, Innocents: ${innocCount}, Unknown: ${unknownCount}`);
-          for (let i = 0; i < snapshot.clues.length; i++) {
-            const c = snapshot.clues[i];
-            const ast = compileClues2([c], snapshot);
-            console.error(`Clue[${i}] "${c}" constraints:`, JSON.stringify(ast, null, 2));
+        });
+        clueHeader.appendChild(toggle);
+        const clueLabel = document.createElement("div");
+        clueLabel.style.cssText = `flex:1;color:${isDisabled ? "#888" : "#fff"};font-weight:${isDisabled ? "normal" : "bold"};`;
+        clueLabel.textContent = speaker ? `#${idx + 1} [${speaker}]: ${clue}` : `#${idx + 1}: ${clue}`;
+        clueHeader.appendChild(clueLabel);
+        clueDiv.appendChild(clueHeader);
+        try {
+          const translation = getClueTranslation(clueInput, state.snapshot);
+          if (translation.constraints.length > 0) {
+            const status = document.createElement("div");
+            status.style.cssText = "margin-top:6px;margin-left:32px;font-size:11px;color:#51cf66;";
+            status.textContent = `\u2713 ${translation.constraints.length} constraint${translation.constraints.length > 1 ? "s" : ""}`;
+            clueDiv.appendChild(status);
           }
-        } catch (debugErr) {
-          console.error("CluesBySam Solver: debug collection failed", debugErr);
+        } catch {
+        }
+        section.appendChild(clueDiv);
+      });
+      container.appendChild(section);
+    }
+    renderCustomRulesForm(container, state) {
+      const section = document.createElement("div");
+      section.style.cssText = "border-top:2px solid #333;padding-top:16px;";
+      const heading = document.createElement("div");
+      heading.style.cssText = "font-weight:bold;color:#ffd43b;margin-bottom:12px;font-size:14px;";
+      heading.textContent = "\u2795 Custom Rules";
+      section.appendChild(heading);
+      const form = document.createElement("div");
+      form.style.cssText = "margin-bottom:16px;padding:12px;background:#2a2a2a;border-radius:6px;";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.id = "custom-rule-input";
+      input.name = "custom-rule";
+      input.autocomplete = "off";
+      input.placeholder = "e.g., eq(3, neighbor(alice)@innocent)";
+      input.style.cssText = "width:100%;padding:8px;background:#1a1a1a;color:#fff;border:1px solid #555;border-radius:4px;font-family:monospace;font-size:12px;margin-bottom:8px;box-sizing:border-box;";
+      form.appendChild(input);
+      const addBtn = document.createElement("button");
+      addBtn.textContent = "\u2795 Add Rule";
+      addBtn.style.cssText = "padding:8px 16px;background:#4fc3f7;color:#000;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:12px;";
+      addBtn.onclick = () => {
+        const dsl = input.value.trim();
+        if (!dsl) {
+          alert("\u26A0\uFE0F Please enter a DSL expression");
+          return;
+        }
+        try {
+          compileDsl(dsl, state.snapshot);
+          sessionCustomRules.push({ dsl });
+          input.value = "";
+          debugLog(`CluesBySam Solver: Added custom rule (enabled): "${dsl}"`);
+          this.update();
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          alert(`\u274C Invalid DSL rule:
+
+${errorMsg}
+
+Please fix the syntax and try again.`);
+          debugLog(`CluesBySam Solver: Failed to add custom rule: ${errorMsg}`);
+        }
+      };
+      form.appendChild(addBtn);
+      section.appendChild(form);
+      if (sessionCustomRules.length > 0) {
+        const rulesList = document.createElement("div");
+        rulesList.style.cssText = "margin-top:12px;";
+        const rulesHeading = document.createElement("div");
+        rulesHeading.style.cssText = "font-size:12px;color:#aaa;margin-bottom:8px;";
+        rulesHeading.textContent = `Session Rules (${sessionCustomRules.length})`;
+        rulesList.appendChild(rulesHeading);
+        sessionCustomRules.forEach((rule, idx) => {
+          const ruleDiv = document.createElement("div");
+          ruleDiv.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px;background:#2a2a2a;border-radius:4px;";
+          const deleteBtn = document.createElement("button");
+          deleteBtn.textContent = "\u2715";
+          deleteBtn.style.cssText = "width:20px;height:20px;padding:0;background:#c92a2a;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:12px;";
+          deleteBtn.onclick = () => {
+            sessionCustomRules.splice(idx, 1);
+            this.update();
+          };
+          ruleDiv.appendChild(deleteBtn);
+          const ruleText = document.createElement("div");
+          ruleText.style.cssText = "flex:1;color:#90ee90;font-family:monospace;font-size:11px;";
+          ruleText.textContent = rule.dsl;
+          ruleDiv.appendChild(ruleText);
+          rulesList.appendChild(ruleDiv);
+        });
+        section.appendChild(rulesList);
+      }
+      container.appendChild(section);
+    }
+    createPanelHeader(title, onClose) {
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex;justify-content:space-between;align-items:center;cursor:move;user-select:none;padding:4px;margin:-4px -4px 0 -4px;";
+      const titleEl = document.createElement("div");
+      titleEl.style.cssText = "font-weight:bold;color:#4fc3f7;font-size:15px;";
+      titleEl.textContent = title;
+      header.appendChild(titleEl);
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "\u2715";
+      closeBtn.style.cssText = "width:24px;height:24px;padding:0;background:#c92a2a;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;font-weight:bold;";
+      closeBtn.onclick = onClose;
+      header.appendChild(closeBtn);
+      return header;
+    }
+    makeDraggable(panel, handle, onDragEnd) {
+      let isDragging = false;
+      let offsetX = 0;
+      let offsetY = 0;
+      handle.addEventListener("mousedown", (e) => {
+        if (e.target.tagName === "BUTTON")
+          return;
+        isDragging = true;
+        offsetX = e.clientX - panel.offsetLeft;
+        offsetY = e.clientY - panel.offsetTop;
+        handle.style.background = "rgba(255,255,255,0.05)";
+      });
+      document.addEventListener("mousemove", (e) => {
+        if (!isDragging)
+          return;
+        panel.style.left = e.clientX - offsetX + "px";
+        panel.style.top = e.clientY - offsetY + "px";
+        panel.style.bottom = "auto";
+      });
+      document.addEventListener("mouseup", () => {
+        if (isDragging) {
+          isDragging = false;
+          handle.style.background = "";
+          if (onDragEnd)
+            onDragEnd();
+        }
+      });
+    }
+    highlightCells(state) {
+      const cardEls = findCardElements();
+      for (let i = 0; i < cardEls.length && i < 20; i++) {
+        const el = cardEls[i];
+        if (el) {
+          el.style.outline = "";
+          el.style.boxShadow = "";
+        }
+      }
+      for (const f of state.suggestion.forced) {
+        const el = cardEls[f.id];
+        if (el) {
+          if (f.status === "CRIMINAL") {
+            el.style.outline = "3px solid rgba(220,50,50,0.9)";
+            el.style.boxShadow = "0 0 8px rgba(220,50,50,0.35)";
+          } else {
+            el.style.outline = "3px solid rgba(50,180,90,0.9)";
+            el.style.boxShadow = "0 0 8px rgba(50,180,90,0.35)";
+          }
         }
       }
     }
+  };
+  var solverUI = new SolverUI();
+  var observer = null;
+  function updateEverything() {
+    solverUI.update();
+  }
+  var updateTimeout = null;
+  function runSolveAndUpdateUI() {
+    updateEverything();
   }
   function attachObserver() {
     if (observer)
       return;
     observer = new MutationObserver((mutations) => {
-      if (window.requestIdleCallback) {
-        window.requestIdleCallback(() => runSolveAndUpdateUI());
-      } else {
-        setTimeout(runSolveAndUpdateUI, 120);
+      const relevantMutation = mutations.some((m) => {
+        const target = m.target;
+        if (target.id === OVERLAY_ID || target.id === "solver-stats-panel" || target.id === "solver-rules-panel" || target.closest("#" + OVERLAY_ID) || target.closest("#solver-stats-panel") || target.closest("#solver-rules-panel")) {
+          return false;
+        }
+        return true;
+      });
+      if (!relevantMutation) {
+        debugLog("CluesBySam Solver: Ignored mutation in own UI");
+        return;
       }
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
+      updateTimeout = window.setTimeout(() => {
+        debugLog("CluesBySam Solver: MutationObserver triggered update");
+        runSolveAndUpdateUI();
+        updateTimeout = null;
+      }, 200);
     });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
   }
   function init() {
-    debugLog("CluesBySam Solver content script started (DOM integration)");
-    runSolveAndUpdateUI();
-    attachObserver();
-    window.addEventListener("keydown", (ev) => {
-      if (ev.ctrlKey && ev.shiftKey && ev.code === "KeyY") {
-        const ov = document.getElementById(OVERLAY_ID);
-        if (!ov)
-          return;
-        ov.style.display = ov.style.display === "none" ? "block" : "none";
-        debugLog("CluesBySam Solver: toggled overlay visibility ->", ov.style.display);
-      }
-    });
+    try {
+      debugLog("CluesBySam Solver content script started (DOM integration)");
+      updateEverything();
+      attachObserver();
+      window.addEventListener("keydown", (ev) => {
+        if (ev.ctrlKey && ev.shiftKey && ev.code === "KeyY") {
+          const ov = document.getElementById(OVERLAY_ID);
+          if (!ov)
+            return;
+          ov.style.display = ov.style.display === "none" ? "block" : "none";
+          debugLog("CluesBySam Solver: toggled overlay visibility ->", ov.style.display);
+        }
+      });
+      debugLog("CluesBySam Solver initialization complete");
+    } catch (error) {
+      console.error("CluesBySam Solver: FATAL ERROR during initialization:", error);
+    }
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

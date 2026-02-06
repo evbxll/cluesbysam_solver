@@ -9,9 +9,14 @@ export type CellSnapshot = {
   pos: string; // e.g., "A1"
 };
 
+export type ClueWithSpeaker = {
+  text: string;
+  speaker?: string; // Name of the card this clue is on
+};
+
 export type BoardSnapshot = {
   cells: CellSnapshot[]; // length 20
-  clues: string[];
+  clues: (string | ClueWithSpeaker)[];
 };
 
 export type Suggestion = {

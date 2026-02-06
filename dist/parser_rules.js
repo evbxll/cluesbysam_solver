@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.compileClues = void 0;
+exports.getClueTranslation = exports.compileClues = exports.compileDsl = void 0;
 const parser_dsl_1 = require("./parser_dsl");
+Object.defineProperty(exports, "compileDsl", { enumerable: true, get: function () { return parser_dsl_1.compileDsl; } });
 const templates = [
     // ============================================================================
     // COMPLEX DIRECTIONAL PATTERNS (checked first - most specific)
@@ -83,7 +84,7 @@ const templates = [
     },
     {
         pattern: "the only {role} in {rowcol} {rowcolval} is {name}'s neighbor",
-        dsl: "eq(1, area({rowcol}({rowcolval})@{role})) + in_group(area({rowcol}({rowcolval})@{role}), neighbor({name})@{role})",
+        dsl: "eq(1, area({rowcol}({rowcolval}))@{role}) + eq(1, (area({rowcol}({rowcolval})) & neighbor({name}))@{role})",
     },
     // ============================================================================
     // PARITY IN AREA
@@ -217,6 +218,10 @@ const templates = [
         dsl: "eq({k}, {dir}({name})@{role})",
     },
     {
+        pattern: "there are exactly {k} {role} between {name} and {name2}",
+        dsl: "eq({k}, between({name}, {name2})@{role})",
+    },
+    {
         pattern: "there are exactly {k} {role} in between {name} and {name2}",
         dsl: "eq({k}, between({name}, {name2})@{role})",
     },
@@ -309,6 +314,22 @@ const templates = [
     {
         pattern: "there's an equal number of {role} in {rowcol}s {rowcolval} and {rowcolval2}",
         dsl: "compare(area({rowcol}({rowcolval}))@{role}, ==, area({rowcol}({rowcolval2}))@{role})",
+    },
+    {
+        pattern: "{name} has more innocent than criminal neighbors",
+        dsl: "compare(neighbor({name})@innocent, >, neighbor({name})@criminal)",
+    },
+    {
+        pattern: "{name} has more criminal than innocent neighbors",
+        dsl: "compare(neighbor({name})@criminal, >, neighbor({name})@innocent)",
+    },
+    {
+        pattern: "{name} has more innocent neighbors than {name2}",
+        dsl: "compare(neighbor({name})@innocent, >, neighbor({name2})@innocent)",
+    },
+    {
+        pattern: "{name} has more criminal neighbors than {name2}",
+        dsl: "compare(neighbor({name})@criminal, >, neighbor({name2})@criminal)",
     },
 ];
 const tokenRegex = {
@@ -424,7 +445,27 @@ function compileClues(clues, board) {
         // Ignore localStorage errors (e.g., in Node.js environment)
     }
     const matchers = templates.map(t => ({ ...t, ...buildMatcher(t.pattern) }));
-    for (const clue of clues) {
+    for (const clueInput of clues) {
+        // Handle both string and ClueWithSpeaker formats
+        let clue;
+        let speaker;
+        if (typeof clueInput === 'string') {
+            clue = clueInput;
+        }
+        else {
+            clue = clueInput.text;
+            speaker = clueInput.speaker;
+        }
+        // Substitute "I" with speaker name if available
+        // Handle verb conjugation for first-person to third-person
+        if (speaker) {
+            // Replace "I have" with "{name} has"
+            clue = clue.replace(/\bI have\b/g, `${speaker} has`);
+            // Replace "I am" with "{name} is"
+            clue = clue.replace(/\bI am\b/g, `${speaker} is`);
+            // Replace any remaining standalone "I" with speaker name
+            clue = clue.replace(/\bI\b/g, speaker);
+        }
         const normalized = normalizeClue(clue);
         // Skip disabled clues
         if (disabledClues.has(clue)) {
@@ -476,4 +517,95 @@ function compileClues(clues, board) {
     return out;
 }
 exports.compileClues = compileClues;
+function getClueTranslation(clueInput, board) {
+    // Handle both string and ClueWithSpeaker formats
+    let clue;
+    let speaker;
+    if (typeof clueInput === 'string') {
+        clue = clueInput;
+    }
+    else {
+        clue = clueInput.text;
+        speaker = clueInput.speaker;
+    }
+    // Substitute "I" with speaker name if available
+    // Handle verb conjugation for first-person to third-person
+    if (speaker) {
+        // Replace "I have" with "{name} has"
+        clue = clue.replace(/\bI have\b/g, `${speaker} has`);
+        // Replace "I am" with "{name} is"
+        clue = clue.replace(/\bI am\b/g, `${speaker} is`);
+        // Replace any remaining standalone "I" with speaker name
+        clue = clue.replace(/\bI\b/g, speaker);
+    }
+    const normalized = normalizeClue(clue);
+    // Load disabled clues from localStorage if available (browser environment)
+    let disabledClues = new Set();
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const stored = localStorage.getItem('cluesbysam_disabled_clues');
+            if (stored) {
+                disabledClues = new Set(JSON.parse(stored));
+            }
+        }
+    }
+    catch (e) {
+        // Ignore localStorage errors
+    }
+    // Skip disabled clues
+    if (disabledClues.has(clue)) {
+        return { dsl: null, constraints: [] };
+    }
+    // Load custom rules from localStorage if available (browser environment)
+    let customRules = [];
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const stored = localStorage.getItem('cluesbysam_custom_rules');
+            if (stored) {
+                customRules = JSON.parse(stored);
+            }
+        }
+    }
+    catch (e) {
+        // Ignore localStorage errors (e.g., in Node.js environment)
+    }
+    // Try custom rules first (exact match only)
+    for (const customRule of customRules) {
+        if (!customRule.enabled)
+            continue;
+        if (normalizeClue(customRule.clue) === normalized) {
+            try {
+                const constraints = (0, parser_dsl_1.compileClues)([customRule.dsl], board);
+                if (constraints.length > 0) {
+                    return { dsl: customRule.dsl, constraints };
+                }
+            }
+            catch (e) {
+                console.error('Custom rule DSL error:', customRule, e);
+            }
+        }
+    }
+    const matchers = templates.map(t => ({ ...t, ...buildMatcher(t.pattern) }));
+    for (const t of matchers) {
+        const m = normalized.match(t.regex);
+        if (!m)
+            continue;
+        // Skip templates marked with "SKIP"
+        if (t.dsl === "SKIP") {
+            continue;
+        }
+        const vars = {};
+        t.tokens.forEach((token, i) => {
+            vars[token] = m[i + 1];
+        });
+        const normalizedVars = normalizeVars(vars);
+        const dsl = fillTemplate(t.dsl, normalizedVars);
+        const constraints = (0, parser_dsl_1.compileClues)([dsl], board);
+        if (constraints.length > 0) {
+            return { dsl, constraints };
+        }
+    }
+    return { dsl: null, constraints: [] };
+}
+exports.getClueTranslation = getClueTranslation;
 exports.default = { compileClues };

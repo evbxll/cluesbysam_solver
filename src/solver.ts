@@ -1,6 +1,8 @@
 import { BoardSnapshot, Suggestion } from "./types";
 import { buildMasks, FULL_MASK, N_CELLS } from "./board";
-import { compileClues, CType } from "./parser_rules";
+import { compileClues, getClueTranslation, compileDsl, CType } from "./parser_rules";
+
+export { getClueTranslation, compileDsl } from "./parser_rules";
 
 const masks = buildMasks();
 
@@ -61,8 +63,8 @@ function evalConstraint(cons: CType, C: number): boolean {
       return (bitCount(bits) % 2 === (cons.odd ? 1 : 0));
     }
     case "COMPARE": {
-      const left = cons.wantCrim ? bitCount(C & cons.leftMask) : bitCount((~C & FULL_MASK) & cons.leftMask);
-      const right = cons.wantCrim ? bitCount(C & cons.rightMask) : bitCount((~C & FULL_MASK) & cons.rightMask);
+      const left = cons.leftWantCrim ? bitCount(C & cons.leftMask) : bitCount((~C & FULL_MASK) & cons.leftMask);
+      const right = cons.rightWantCrim ? bitCount(C & cons.rightMask) : bitCount((~C & FULL_MASK) & cons.rightMask);
       if (cons.op === ">") return left > right;
       if (cons.op === "<") return left < right;
       return left === right;
